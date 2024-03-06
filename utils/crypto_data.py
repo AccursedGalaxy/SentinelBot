@@ -143,3 +143,23 @@ async def fetch_price(symbol):
         # Close the exchange connection properly
         if exchange:
             await exchange.close()
+
+
+async def fetch_ohlcv(symbol, timeframe, since=None, limit=None):
+    """Fetch OHLCV data for a symbol using ccxt asyncio support."""
+    exchange = None
+    try:
+        # Initialize the exchange
+        exchange = await get_exchange("binance")
+        if not exchange:
+            raise Exception("Failed to initialize exchange")
+
+        # Fetch the OHLCV data
+        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe, since, limit)
+        return ohlcv
+    except Exception as e:
+        logger.error(f"Error fetching OHLCV for {symbol}: {e}")
+    finally:
+        # Close the exchange connection properly
+        if exchange:
+            await exchange.close()

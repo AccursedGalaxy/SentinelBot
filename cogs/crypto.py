@@ -7,8 +7,7 @@ from disnake import Embed
 from disnake.ext import commands
 
 from utils.chart import PlotChart
-from utils.crypto_data import (fetch_current_price, get_exchange, get_markets,
-                               validate_ticker)
+from utils.crypto_data import fetch_current_price, validate_ticker
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = logging.getLogger("CryptoSentinel")
