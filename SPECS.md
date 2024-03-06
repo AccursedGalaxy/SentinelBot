@@ -10,7 +10,6 @@ Sentinel is a sophisticated Discord bot engineered to deliver real-time trading 
 These are the alerts that will be implemented into the MVP (Minimum Viable Product) version of the bot.
 The system around this should be built in a way that it can be expanded upon in the future with additional alert types or improved alerts.
 
-
 1. **Trending Coins Alert:**
    - Dispatches a daily morning alert enumerating "trending" coins.
    - A coin is deemed "trending" based on two pivotal conditions:
@@ -27,10 +26,15 @@ The system around this should be built in a way that it can be expanded upon in 
 ### User Interaction
 
 - Interaction with Sentinel is streamlined through a specific alerts channel within Discord.
-- In the MVP phase, users have access to two principal commands:
+- In the MVP phase, users have access to two principal commands related to alerts:
   - `/trending`: Retrieves the most recent "Trending Coins" alerts.
   - `/bplays`: Gathers the latest alerts for "Oversold Bounce Plays."
 - Access to the bot's services is gated behind a subscription through BuyMeACoffee, granting appropriate Discord roles to subscribers.
+
+### User Interface
+Since we are using Discord we are limited to the UI that Discord provides and the chat based nature of discord.
+Because of that, we need to make sure that all elements that we can controll like, text formatting, images, embeds, etc are used to their fullest.
+For the Trending coins for example: we need to work out a proper text formatting in a embed add charts of the coins and maybe more stats like daily&weekly performance.
 
 ## Technical Requirements
 
