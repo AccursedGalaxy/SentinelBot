@@ -31,7 +31,7 @@ Utilize RVOL with a threshold of 1.3 to identify elevated volume. Allow for manu
 Determine a Higher High/Higher Low structure based on the last week's H1 bars, ensuring the analysis adapts dynamically to recent market behavior.
 Include the flexibility to fetch OHLCV data for various timeframes (e.g., H1, D1, H4, etc.) using ccxt, allowing potential future expansion to monitor multiple timeframes.
 
-####Oversold Bounce Plays Alert:
+#### Oversold Bounce Plays Alert:
 Define "oversold" as an RSI below 30. Monitor this condition in the H1 timeframe.
 Consider a bar as "closed positive" if its closing price is higher than its opening price, regardless of the specific dollar or percentage amount.
 
