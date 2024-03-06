@@ -7,6 +7,9 @@ Sentinel is a sophisticated Discord bot engineered to deliver real-time trading 
 ## Key Functionalities
 
 ### MVP Alerts
+These are the alerts that will be implemented into the MVP (Minimum Viable Product) version of the bot.
+The system around this should be built in a way that it can be expanded upon in the future with additional alert types or improved alerts.
+
 
 1. **Trending Coins Alert:**
    - Dispatches a daily morning alert enumerating "trending" coins.
