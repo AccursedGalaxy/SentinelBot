@@ -46,6 +46,6 @@ The system around this should be built in a way that it can be expanded upon in 
 
 - Sentinel's architecture includes a main access point (main.py) that handles command interactions and alert dissemination.
 - An additional "worker" module is dedicated to analyzing OHLCV data for cryptocurrencies fetched via ccxt. This module is responsible for detecting alert conditions, crafting alert messages, and storing these in the database.
-- The main.py script then retrieves these alerts from the database to broadcast them on the designated Discord channel. (open to change this and have a additional module for this but each module will cost extra in hosting.)
+- The main.py script then retrieves these alerts from the database to broadcast them on the designated Discord channel. (open to change this and have a additional module, but each module will cost extra in hosting.)
 - Alert frequencies are as follows: "Trending Coins" are alerted once every morning, and "Oversold Bounce Plays" are alerted hourly, with flexibility in adjusting these intervals.
-
+  - Each alert should only be sent once, and not be repeated if the conditions are still met in the next interval.
