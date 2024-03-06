@@ -75,13 +75,3 @@ List of Python packages required is in `requirements.txt`. Install them using `p
 
 Execute `main.py` to run the bot. Ensure all environment variables are set as defined in `settings.py`.
 
-## Contributing
-
-Guidelines for contributing to this project (e.g., code style, commit message format, etc.).
-
-## License
-
-Specify the license under which this project is released.
-
-```
-
