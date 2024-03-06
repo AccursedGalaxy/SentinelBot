@@ -1,13 +1,13 @@
-# Project Title
+# Sentinel 
 
 ## Description
-
-This Python project is a Discord bot built using the disnake library, designed to interact with Discord servers and users, perform administrative tasks, handle data with an SQL database, and more.
+A Discord bot designed to help crypto traders save time browsing through charts to find the best setups.
+User will get signals about important price and volume events right into discord.
+-> Starting features are Volume Spike and RVOL (Relative Volume) alerts.
 
 ## Directory Structure
 
 ```
-.
 ├── cogs/
 │   ├── admin.py       # Admin commands for the bot.
 │   └── help.py        # Help commands providing information about other commands.
@@ -66,12 +66,3 @@ Provides decorators for command functions, adding checks like whether the user i
 #### paginators.py
 
 Utility for creating paginated messages in Discord, useful for commands that return large amounts of data.
-
-## Requirements
-
-List of Python packages required is in `requirements.txt`. Install them using `pip install -r requirements.txt`.
-
-## Running the Bot
-
-Execute `main.py` to run the bot. Ensure all environment variables are set as defined in `settings.py`.
-
