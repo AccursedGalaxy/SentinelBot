@@ -41,3 +41,23 @@ class Guild(Base):
             self.guild_name,
             self.joined_at,
         )
+
+
+class AlertsChannel(Base):
+    __tablename__ = "alerts_channels"
+
+    id = Column(Integer, primary_key=True)
+    channel_id = Column(BigInteger)
+    channel_name = Column(String)
+    guild_id = Column(BigInteger)
+
+    def __repr__(self):
+        return (
+            "<AlertsChannel(id='%s', channel_id='%s', channel_name='%s', guild_id='%s')>"
+            % (
+                self.id,
+                self.channel_id,
+                self.channel_name,
+                self.guild_id,
+            )
+        )
