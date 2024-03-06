@@ -2,19 +2,11 @@
 import logging
 
 import colorlog
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    Integer,
-    String,
-    Text,
-)
+from sqlalchemy import (BigInteger, Boolean, Column, DateTime, Float, Integer,
+                        String, Text)
 from sqlalchemy.ext.declarative import declarative_base
 
-logger = logging.getLogger("CryptoSentinel")
+logger = logging.getLogger("Sentinel")
 
 Base = declarative_base()
 

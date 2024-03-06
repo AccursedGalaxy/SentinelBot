@@ -2,9 +2,10 @@ import logging
 
 import disnake
 from disnake.ext import commands
+
 from utils.paginators import ButtonPaginator as Paginator
 
-logger = logging.getLogger("CryptoSentinel")
+logger = logging.getLogger("Sentinel")
 
 
 class HelpCommands(commands.Cog):

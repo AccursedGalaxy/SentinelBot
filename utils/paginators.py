@@ -10,7 +10,7 @@ handler.setFormatter(
     colorlog.ColoredFormatter("%(log_color)s%(asctime)s - %(levelname)s - %(message)s")
 )
 
-logger = colorlog.getLogger("CryptoBettingBot")
+logger = colorlog.getLogger("Sentinel")
 logger.setLevel(logging.INFO)
 
 

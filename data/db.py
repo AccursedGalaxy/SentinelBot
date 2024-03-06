@@ -1,7 +1,6 @@
 # db.py
 import logging
 
-import colorlog
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -9,7 +8,7 @@ from config.settings import SQL_DATABASE_URL
 
 from .models import Base
 
-logger = logging.getLogger("CryptoSentinel")
+logger = logging.getLogger("Sentinel")
 
 engine = create_engine(SQL_DATABASE_URL)
 session_factory = sessionmaker(bind=engine)
