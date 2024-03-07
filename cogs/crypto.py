@@ -8,8 +8,8 @@ from disnake.ext import commands
 
 from config.settings import CG_API_KEY
 from utils.chart import PlotChart
-from utils.crypto_data import (fetch_current_price, fetch_top_gainers_losers,
-                               validate_ticker)
+from utils.crypto_data import (fetch_current_price, fetch_historical_data,
+                               fetch_top_gainers_losers, validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = logging.getLogger("CryptoSentinel")
@@ -19,53 +19,6 @@ import time
 
 import aiohttp
 import matplotlib.pyplot as plt
-
-# Cache to store historical data
-historical_data_cache = {}
-
-
-async def fetch_historical_data(coin_id, days=1):
-    cache_key = f"{coin_id}_{days}"
-    if cache_key in historical_data_cache:
-        # Return cached data if available
-        return historical_data_cache[cache_key]
-
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-    params = {"vs_currency": "usd", "days": days}
-    if not 2 <= days <= 90:
-        params["interval"] = "daily"
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                historical_data_cache[cache_key] = data["prices"]  # Cache the data
-                return data["prices"]
-            elif response.status == 429:
-                logger.error(
-                    f"Rate limit exceeded. Retrying after 60 seconds. Response: {await response.text()}"
-                )
-                time.sleep(60)  # Wait for 60 seconds before retrying
-                return await fetch_historical_data(coin_id, days)
-            else:
-                logger.error(
-                    f"Failed to fetch historical data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
-                )
-                return None
-
-
-async def fetch_trading_data(coin_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/tickers"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get("tickers", [])
-            else:
-                logger.error(
-                    f"Failed to fetch trading data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
-                )
-                return None
 
 
 class CryptoCommands(commands.Cog):
@@ -168,50 +121,6 @@ class CryptoCommands(commands.Cog):
                 name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
             )
             await inter.followup.send(embed=embed)
-
-    @commands.slash_command(
-        name="liquidity",
-        description="Shows liquidity data for Bitcoin across various exchanges",
-    )
-    async def liquidity(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.defer()
-        coin_id = "bitcoin"  # CoinGecko ID for Bitcoin
-        trading_data = await fetch_trading_data(coin_id)
-
-        if not trading_data:
-            await inter.followup.send("Failed to fetch liquidity data.")
-            return
-
-        # Process and display the data
-        embeds = []
-        for exchange in trading_data[:10]:  # Limit to 10 exchanges for brevity
-            embed = disnake.Embed(
-                title=f"{exchange['market']['name']} - {exchange['base']}/{exchange['target']}",
-                url=exchange.get("trade_url", "Not available"),
-                color=disnake.Color.blue(),
-            )
-            embed.add_field(
-                name="Last Trade Price", value=f"{exchange['last']}", inline=True
-            )
-            embed.add_field(name="Volume", value=f"{exchange['volume']}", inline=True)
-            embed.add_field(
-                name="Trust Score", value=f"{exchange['trust_score']}", inline=True
-            )
-            embed.add_field(
-                name="Bid-Ask Spread",
-                value=f"{exchange['bid_ask_spread_percentage']}",
-                inline=True,
-            )
-            embed.add_field(
-                name="Last Traded At",
-                value=f"{exchange['last_traded_at']}",
-                inline=True,
-            )
-            embeds.append(embed)
-
-        # Use a paginator to handle multiple embeds
-        paginator = Paginator(self.bot, inter, embeds)
-        await paginator.run()
 
 
 def setup(bot):

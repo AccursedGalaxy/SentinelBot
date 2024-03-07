@@ -197,3 +197,36 @@ async def fetch_top_gainers_losers(
                     f"Error fetching data from CoinGecko API: {response.status} - {error_message}"
                 )
                 return []
+
+
+historical_data_cache = {}
+
+
+async def fetch_historical_data(coin_id, days=1):
+    cache_key = f"{coin_id}_{days}"
+    if cache_key in historical_data_cache:
+        # Return cached data if available
+        return historical_data_cache[cache_key]
+
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+    params = {"vs_currency": "usd", "days": days}
+    if not 2 <= days <= 90:
+        params["interval"] = "daily"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                historical_data_cache[cache_key] = data["prices"]  # Cache the data
+                return data["prices"]
+            elif response.status == 429:
+                logger.error(
+                    f"Rate limit exceeded. Retrying after 60 seconds. Response: {await response.text()}"
+                )
+                time.sleep(60)  # Wait for 60 seconds before retrying
+                return await fetch_historical_data(coin_id, days)
+            else:
+                logger.error(
+                    f"Failed to fetch historical data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None
