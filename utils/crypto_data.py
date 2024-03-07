@@ -1,11 +1,12 @@
 import asyncio
 import logging
 
+import aiohttp
 import ccxt.async_support as ccxt
 import colorlog
 import requests
 
-from config.settings import CMC_API_KEY
+from config.settings import CG_API_KEY, CMC_API_KEY
 
 # Set up colorful logging
 handler = colorlog.StreamHandler()
@@ -163,3 +164,36 @@ async def fetch_ohlcv(symbol, timeframe, since=None, limit=None):
         # Close the exchange connection properly
         if exchange:
             await exchange.close()
+
+
+async def fetch_top_gainers_losers(
+    api_key, category="gainers", time_period="24h", top_coins=300
+):
+    url = "https://pro-api.coingecko.com/api/v3/coins/top_gainers_losers"
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+    params = {
+        "vs_currency": "usd",
+        "duration": time_period,
+        "top_coins": top_coins,  # Include the top_coins parameter
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                logger.info(f"Top {category} fetched successfully")
+                if category == "gainers":
+                    return data.get("top_gainers", [])[:5]  # Get top 5 gainers
+                elif category == "losers":
+                    return data.get("top_losers", [])[:5]  # Get top 5 losers
+                else:
+                    logger.error(f"Invalid category: {category}")
+                    return []
+            else:
+                error_message = await response.text()
+                logger.error(
+                    f"Error fetching data from CoinGecko API: {response.status} - {error_message}"
+                )
+                return []

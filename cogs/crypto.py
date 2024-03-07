@@ -6,11 +6,78 @@ import disnake
 from disnake import Embed
 from disnake.ext import commands
 
+from config.settings import CG_API_KEY
 from utils.chart import PlotChart
-from utils.crypto_data import fetch_current_price, validate_ticker
+from utils.crypto_data import (fetch_current_price, fetch_top_gainers_losers,
+                               validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = logging.getLogger("CryptoSentinel")
+
+import io
+import time
+
+import aiohttp
+import matplotlib.pyplot as plt
+
+# Cache to store historical data
+historical_data_cache = {}
+
+
+async def fetch_historical_data(coin_id, days=1):
+    cache_key = f"{coin_id}_{days}"
+    if cache_key in historical_data_cache:
+        # Return cached data if available
+        return historical_data_cache[cache_key]
+
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+    params = {"vs_currency": "usd", "days": days}
+    if not 2 <= days <= 90:
+        params["interval"] = "daily"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                historical_data_cache[cache_key] = data["prices"]  # Cache the data
+                return data["prices"]
+            elif response.status == 429:
+                logger.error(
+                    f"Rate limit exceeded. Retrying after 60 seconds. Response: {await response.text()}"
+                )
+                time.sleep(60)  # Wait for 60 seconds before retrying
+                return await fetch_historical_data(coin_id, days)
+            else:
+                logger.error(
+                    f"Failed to fetch historical data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None
+
+
+async def generate_price_chart(symbol, prices):
+    if not prices:
+        return None
+
+    # Extracting timestamps and price values
+    times = [price[0] for price in prices]
+    values = [price[1] for price in prices]
+
+    # Creating a plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(times, values, label=f"{symbol.upper()} Price (USD)", color="blue")
+    plt.title(f"{symbol.upper()} Price Chart (Last 24 Hours)")
+    plt.xlabel("Time")
+    plt.ylabel("Price (USD)")
+    plt.legend()
+    plt.grid(True)
+
+    # Saving the plot to a bytes buffer
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    plt.close()
+
+    return buffer
 
 
 class CryptoCommands(commands.Cog):
@@ -71,6 +138,48 @@ class CryptoCommands(commands.Cog):
             await inter.followup.send(
                 "An error occurred while processing your request."
             )
+
+    @commands.slash_command(name="gainers", description="Shows the top 5 gainers")
+    async def gainers(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.defer()
+        top_gainers = await fetch_top_gainers_losers(
+            api_key=CG_API_KEY, category="gainers"
+        )
+        for coin in top_gainers[:5]:
+            embed = disnake.Embed(
+                title=f"{coin['name']} ({coin['symbol'].upper()})",
+                color=disnake.Color.green(),
+            )
+            embed.set_thumbnail(url=coin["image"])
+            embed.add_field(name="Price", value=f"${coin['usd']:.6f}", inline=True)
+            embed.add_field(
+                name="24h Change", value=f"{coin['usd_24h_change']:.2f}%", inline=True
+            )
+            embed.add_field(
+                name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
+            )
+            await inter.followup.send(embed=embed)
+
+    @commands.slash_command(name="losers", description="Shows the top 5 losers")
+    async def losers(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.defer()
+        top_losers = await fetch_top_gainers_losers(
+            api_key=CG_API_KEY, category="losers"
+        )
+        for coin in top_losers[:5]:
+            embed = disnake.Embed(
+                title=f"{coin['name']} ({coin['symbol'].upper()})",
+                color=disnake.Color.red(),
+            )
+            embed.set_thumbnail(url=coin["image"])
+            embed.add_field(name="Price", value=f"${coin['usd']:.6f}", inline=True)
+            embed.add_field(
+                name="24h Change", value=f"{coin['usd_24h_change']:.2f}%", inline=True
+            )
+            embed.add_field(
+                name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
+            )
+            await inter.followup.send(embed=embed)
 
 
 def setup(bot):
