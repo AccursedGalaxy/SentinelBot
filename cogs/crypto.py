@@ -1,8 +1,13 @@
+import functools
+import io
 import logging
 import os
+import time
 
+import aiohttp
 import colorlog
 import disnake
+import matplotlib.pyplot as plt
 from disnake import Embed
 from disnake.ext import commands
 
@@ -10,16 +15,32 @@ from config.settings import CG_API_KEY
 from utils.chart import PlotChart
 from utils.crypto_data import (fetch_coin_data, fetch_current_price,
                                fetch_historical_data, fetch_new_coins,
-                               fetch_top_gainers_losers, validate_ticker)
+                               fetch_top_gainers_losers, fetch_trending_coins,
+                               validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = logging.getLogger("CryptoSentinel")
 
-import io
-import time
 
-import aiohttp
-import matplotlib.pyplot as plt
+def cache_response(timeout):
+    def decorator(func):
+        cache = {}
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = (args, frozenset(kwargs.items()))
+            result, expiry = cache.get(key, (None, 0))
+
+            if time.time() < expiry:
+                return result
+
+            result = await func(*args, **kwargs)
+            cache[key] = (result, time.time() + timeout)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 class CryptoCommands(commands.Cog):
@@ -82,6 +103,7 @@ class CryptoCommands(commands.Cog):
             )
 
     @commands.slash_command(name="gainers", description="Shows the top 5 gainers")
+    @cache_response(3600)
     async def gainers(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer()
         top_gainers = await fetch_top_gainers_losers(
@@ -103,6 +125,7 @@ class CryptoCommands(commands.Cog):
             await inter.followup.send(embed=embed)
 
     @commands.slash_command(name="losers", description="Shows the top 5 losers")
+    @cache_response(3600)
     async def losers(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer()
         top_losers = await fetch_top_gainers_losers(
@@ -127,6 +150,7 @@ class CryptoCommands(commands.Cog):
         name="new_listings",
         description="Shows newly listed cryptocurrencies from CoinGecko",
     )
+    @cache_response(3600)
     async def new_listings(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer()
         new_coins = await fetch_new_coins()
@@ -177,6 +201,48 @@ class CryptoCommands(commands.Cog):
 
         else:
             await inter.followup.send("Failed to retrieve new coin listings.")
+
+    @commands.slash_command(
+        name="trending", description="Shows trending cryptocurrencies on CoinGecko"
+    )
+    @cache_response(3600)
+    async def trending(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.defer()
+        trending_coins = await fetch_trending_coins()
+
+        if trending_coins:
+            for coin in trending_coins["coins"][:5]:  # Limiting to 5 coins for brevity
+                coin_data = coin["item"]
+                embed = disnake.Embed(
+                    title=f"{coin_data['name']} ({coin_data['symbol'].upper()})",
+                    description=f"Market Cap Rank: {coin_data['market_cap_rank']}",
+                    color=disnake.Color.gold(),
+                )
+                embed.set_thumbnail(url=coin_data["large"])
+
+                # Format the price to handle small numbers
+                price = float(coin_data["data"]["price"].replace("$", ""))
+                if price < 0.01:
+                    formatted_price = f"${price:.8f}"  # Show more decimal places for very small numbers
+                else:
+                    formatted_price = (
+                        f"${price:.2f}"  # Standard formatting for larger numbers
+                    )
+
+                embed.add_field(name="Price", value=formatted_price, inline=True)
+                embed.add_field(
+                    name="Market Cap",
+                    value=coin_data["data"]["market_cap"],
+                    inline=True,
+                )
+                embed.add_field(
+                    name="24h Change",
+                    value=f"{coin_data['data']['price_change_percentage_24h']['usd']:.2f}%",
+                    inline=False,
+                )
+                await inter.followup.send(embed=embed)
+        else:
+            await inter.followup.send("Failed to retrieve trending cryptocurrencies.")
 
 
 def setup(bot):

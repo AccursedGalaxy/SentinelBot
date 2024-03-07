@@ -302,3 +302,20 @@ async def fetch_coin_data(coin_id, api_key=CG_API_KEY):
                 return important_data
             else:
                 return {"error": "Failed to fetch data"}
+
+
+async def fetch_trending_coins(api_key=CG_API_KEY):
+    url = "https://pro-api.coingecko.com/api/v3/search/trending"
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data
+            else:
+                logger.error(
+                    f"Failed to fetch trending coins. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None
