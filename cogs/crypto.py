@@ -54,30 +54,18 @@ async def fetch_historical_data(coin_id, days=1):
                 return None
 
 
-async def generate_price_chart(symbol, prices):
-    if not prices:
-        return None
-
-    # Extracting timestamps and price values
-    times = [price[0] for price in prices]
-    values = [price[1] for price in prices]
-
-    # Creating a plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(times, values, label=f"{symbol.upper()} Price (USD)", color="blue")
-    plt.title(f"{symbol.upper()} Price Chart (Last 24 Hours)")
-    plt.xlabel("Time")
-    plt.ylabel("Price (USD)")
-    plt.legend()
-    plt.grid(True)
-
-    # Saving the plot to a bytes buffer
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    plt.close()
-
-    return buffer
+async def fetch_trading_data(coin_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/tickers"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("tickers", [])
+            else:
+                logger.error(
+                    f"Failed to fetch trading data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None
 
 
 class CryptoCommands(commands.Cog):
@@ -180,6 +168,50 @@ class CryptoCommands(commands.Cog):
                 name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
             )
             await inter.followup.send(embed=embed)
+
+    @commands.slash_command(
+        name="liquidity",
+        description="Shows liquidity data for Bitcoin across various exchanges",
+    )
+    async def liquidity(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.defer()
+        coin_id = "bitcoin"  # CoinGecko ID for Bitcoin
+        trading_data = await fetch_trading_data(coin_id)
+
+        if not trading_data:
+            await inter.followup.send("Failed to fetch liquidity data.")
+            return
+
+        # Process and display the data
+        embeds = []
+        for exchange in trading_data[:10]:  # Limit to 10 exchanges for brevity
+            embed = disnake.Embed(
+                title=f"{exchange['market']['name']} - {exchange['base']}/{exchange['target']}",
+                url=exchange.get("trade_url", "Not available"),
+                color=disnake.Color.blue(),
+            )
+            embed.add_field(
+                name="Last Trade Price", value=f"{exchange['last']}", inline=True
+            )
+            embed.add_field(name="Volume", value=f"{exchange['volume']}", inline=True)
+            embed.add_field(
+                name="Trust Score", value=f"{exchange['trust_score']}", inline=True
+            )
+            embed.add_field(
+                name="Bid-Ask Spread",
+                value=f"{exchange['bid_ask_spread_percentage']}",
+                inline=True,
+            )
+            embed.add_field(
+                name="Last Traded At",
+                value=f"{exchange['last_traded_at']}",
+                inline=True,
+            )
+            embeds.append(embed)
+
+        # Use a paginator to handle multiple embeds
+        paginator = Paginator(inter, embeds)
+        await paginator.run()
 
 
 def setup(bot):
