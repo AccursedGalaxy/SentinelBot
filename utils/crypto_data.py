@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 import aiohttp
 import ccxt.async_support as ccxt
@@ -230,3 +231,74 @@ async def fetch_historical_data(coin_id, days=1):
                     f"Failed to fetch historical data for {coin_id}. Status: {response.status}. Response: {await response.text()}"
                 )
                 return None
+
+
+async def fetch_new_coins(api_key=CG_API_KEY):
+    url = "https://pro-api.coingecko.com/api/v3/coins/list/new"
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                new_coins = await response.json()
+                # Convert activation time to a readable format
+                for coin in new_coins:
+                    coin["activated_at"] = time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(coin["activated_at"])
+                    )
+                return new_coins
+            else:
+                logger.error(
+                    f"Failed to fetch new coins. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None
+
+
+import aiohttp
+
+
+async def fetch_coin_data(coin_id, api_key=CG_API_KEY):
+    """
+    Fetches important and valuable information for a specified coin asynchronously.
+
+    Args:
+    coin_id (str): The ID of the coin to fetch data for.
+
+    Returns:
+    dict: A dictionary containing the fetched coin data.
+    """
+    url = f"https://pro-api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=true&market_data=false&community_data=true&developer_data=true&sparkline=true"
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                important_data = {
+                    "id": data["id"],
+                    "symbol": data["symbol"],
+                    "name": data["name"],
+                    "hashing_algorithm": data["hashing_algorithm"],
+                    "description": data["description"]["en"],
+                    "genesis_date": data["genesis_date"],
+                    "sentiment_votes_up_percentage": data[
+                        "sentiment_votes_up_percentage"
+                    ],
+                    "sentiment_votes_down_percentage": data[
+                        "sentiment_votes_down_percentage"
+                    ],
+                    "market_cap_rank": data.get(
+                        "market_cap_rank"
+                    ),  # Use get to avoid KeyError
+                    "community_data": data["community_data"],
+                    "developer_data": data["developer_data"],
+                    "links": data["links"],
+                    "image": data["image"],
+                    "last_updated": data["last_updated"],
+                }
+                return important_data
+            else:
+                return {"error": "Failed to fetch data"}
