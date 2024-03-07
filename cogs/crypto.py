@@ -27,19 +27,34 @@ logger = logging.getLogger("CryptoSentinel")
 def create_category_embed(category, coins_data, sparkline_image_path=None):
     # Sort coins by market cap to find the top 3
     top_coins_by_market_cap = sorted(
-        coins_data, key=lambda x: x["market_cap"], reverse=True
+        coins_data, key=lambda x: x.get("market_cap", 0), reverse=True
     )[:3]
 
-    # Find the coin with the highest 24h increase
-    highest_24h_increase = max(
-        coins_data, key=lambda x: x["price_change_percentage_24h"]
-    )
+    # Filter out coins where 'price_change_percentage_24h' is None and find the max
+    valid_24h_changes = [
+        coin
+        for coin in coins_data
+        if coin.get("price_change_percentage_24h") is not None
+    ]
+    if valid_24h_changes:
+        highest_24h_increase = max(
+            valid_24h_changes, key=lambda x: x["price_change_percentage_24h"]
+        )
+    else:
+        highest_24h_increase = None
 
-    # Find the coin with the highest 1h increase
-    highest_1h_increase = max(
-        coins_data,
-        key=lambda x: x["price_change_percentage_1h_in_currency"],
-    )
+    # Filter out coins where 'price_change_percentage_1h_in_currency' is None and find the max
+    valid_1h_changes = [
+        coin
+        for coin in coins_data
+        if coin.get("price_change_percentage_1h_in_currency") is not None
+    ]
+    if valid_1h_changes:
+        highest_1h_increase = max(
+            valid_1h_changes, key=lambda x: x["price_change_percentage_1h_in_currency"]
+        )
+    else:
+        highest_1h_increase = None
 
     embed = disnake.Embed(
         title=f"Category: {category.capitalize()}",
@@ -51,23 +66,25 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
     for i, coin in enumerate(top_coins_by_market_cap, 1):
         embed.add_field(
             name=f"Top {i}: {coin['name']} ({coin['symbol'].upper()})",
-            value=f"Market Cap: ${coin['market_cap']}\nCurrent Price: ${coin['current_price']:.6f}\n24h Change: {coin['price_change_percentage_24h']:.2f}%",
+            value=f"Market Cap: ${coin['market_cap']}\nCurrent Price: ${coin['current_price']:.6f}\n24h Change: {coin.get('price_change_percentage_24h', 'N/A')}",
             inline=False,
         )
 
-    # Add field for the highest 24h increase
-    embed.add_field(
-        name=f"Highest 24h Increase: {highest_24h_increase['name']} ({highest_24h_increase['symbol'].upper()})",
-        value=f"Current Price: ${highest_24h_increase['current_price']:.6f}\n24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%",
-        inline=False,
-    )
+    # Add field for the highest 24h increase, if available
+    if highest_24h_increase:
+        embed.add_field(
+            name=f"Highest 24h Increase: {highest_24h_increase['name']} ({highest_24h_increase['symbol'].upper()})",
+            value=f"Current Price: ${highest_24h_increase['current_price']:.6f}\n24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%",
+            inline=False,
+        )
 
-    # Add field for the highest 1h increase
-    embed.add_field(
-        name=f"Highest 1h Increase: {highest_1h_increase['name']} ({highest_1h_increase['symbol'].upper()})",
-        value=f"Current Price: ${highest_1h_increase['current_price']:.6f}\n1h Change: {highest_1h_increase['price_change_percentage_1h_in_currency']:.2f}%",
-        inline=False,
-    )
+    # Add field for the highest 1h increase, if available
+    if highest_1h_increase:
+        embed.add_field(
+            name=f"Highest 1h Increase: {highest_1h_increase['name']} ({highest_1h_increase['symbol'].upper()})",
+            value=f"Current Price: ${highest_1h_increase['current_price']:.6f}\n1h Change: {highest_1h_increase['price_change_percentage_1h_in_currency']:.2f}%",
+            inline=False,
+        )
 
     if sparkline_image_path:
         embed.set_image(url="attachment://sparkline.png")
@@ -326,52 +343,52 @@ class CryptoCommands(commands.Cog):
         await inter.response.defer()
         coins_data = await fetch_coins_by_category(category)
 
-        if coins_data:
-            # Aggregate sparkline data
-            sparklines = [
-                coin["sparkline_in_7d"]["price"]
-                for coin in coins_data
-                if "sparkline_in_7d" in coin
-                and isinstance(coin["sparkline_in_7d"]["price"], list)
-            ]
-
-            # Check if all sparklines have the same length
-            if sparklines and all(
-                len(sparkline) == len(sparklines[0]) for sparkline in sparklines
-            ):
-                # Calculate the average sparkline
-                avg_sparkline = np.mean(np.array(sparklines), axis=0)
-
-                # Generate a plot
-                plt.figure(figsize=(6, 2))
-                plt.plot(avg_sparkline, color="blue")
-                plt.axis("off")
-
-                # Save the plot as an image
-                sparkline_image_path = "sparkline.png"
-                plt.savefig(sparkline_image_path)
-                plt.close()
-
-                # Create the embed with the sparkline image
-                embed = create_category_embed(
-                    category, coins_data, sparkline_image_path
-                )
-
-                # Send the embed with the image
-                await inter.followup.send(
-                    file=disnake.File(sparkline_image_path, filename="sparkline.png"),
-                    embed=embed,
-                )
-
-                os.remove(sparkline_image_path)
-            else:
-                # Handle the case where sparkline data is not uniform or missing
-                embed = create_category_embed(category, coins_data)
-                await inter.followup.send(embed=embed)
-        else:
+        if not coins_data:
             await inter.followup.send(
                 f"Failed to retrieve data for category: {category}"
             )
+            return
+
+        # Extract sparkline data, ensuring each is a valid list of prices
+        sparklines = [
+            coin["sparkline_in_7d"]["price"]
+            for coin in coins_data
+            if "sparkline_in_7d" in coin
+            and isinstance(coin["sparkline_in_7d"]["price"], list)
+        ]
+
+        # Handle cases where sparkline data may be missing or of unequal lengths
+        if not sparklines:
+            embed = create_category_embed(category, coins_data)
+            await inter.followup.send(embed=embed)
+            return
+
+        # Normalize the length of sparklines to handle missing data points
+        min_length = min(len(sparkline) for sparkline in sparklines)
+        normalized_sparklines = [
+            sparkline[:min_length]
+            for sparkline in sparklines
+            if len(sparkline) >= min_length
+        ]
+
+        # Calculate the average sparkline
+        avg_sparkline = np.mean(np.array(normalized_sparklines), axis=0)
+
+        # Generate and save the plot
+        plt.figure(figsize=(6, 2))
+        plt.plot(avg_sparkline, color="blue")
+        plt.axis("off")
+        sparkline_image_path = "sparkline.png"
+        plt.savefig(sparkline_image_path)
+        plt.close()
+
+        # Create and send the embed with the sparkline image
+        embed = create_category_embed(category, coins_data, sparkline_image_path)
+        await inter.followup.send(
+            file=disnake.File(sparkline_image_path, filename="sparkline.png"),
+            embed=embed,
+        )
+        os.remove(sparkline_image_path)
 
 
 def setup(bot):

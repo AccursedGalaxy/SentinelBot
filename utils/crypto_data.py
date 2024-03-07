@@ -335,7 +335,7 @@ async def fetch_coins_by_category(category, api_key=CG_API_KEY):
     params = {
         "vs_currency": "usd",
         "category": category,
-        "per_page": 10,
+        "per_page": 25,
         "page": 1,
         "sparkline": "true",  # Convert boolean to string
         "price_change_percentage": "1h",
