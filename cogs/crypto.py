@@ -210,7 +210,7 @@ class CryptoCommands(commands.Cog):
             embeds.append(embed)
 
         # Use a paginator to handle multiple embeds
-        paginator = Paginator(inter, embeds)
+        paginator = Paginator(self.bot, inter, embeds)
         await paginator.run()
 
 
