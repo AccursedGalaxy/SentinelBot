@@ -7,6 +7,7 @@ from disnake.ext.commands import CheckFailure
 
 from config.settings import CREATOR_ID
 from data.db import Database
+from data.models import CommandsChannel
 
 # Logging setup
 handler = colorlog.StreamHandler()
@@ -54,30 +55,30 @@ def is_lowcaphunter():
     return commands.check(predicate)
 
 
-# def is_bot_channel():
-#     async def predicate(ctx):
-#         if ctx.guild:
-#             db = Database()
-#             # Query the BotChannel table using SQLAlchemy syntax
-#             bot_channel = (
-#                 db.session.query(BotChannel)
-#                 .filter(BotChannel.guild_id == ctx.guild.id)
-#                 .first()
-#             )
-#             if bot_channel:
-#                 if ctx.channel.id == bot_channel.channel_id:
-#                     return True
-#                 else:
-#                     await ctx.send(
-#                         f"{ctx.author.mention} Please use bot commands in <#{bot_channel.channel_id}>."
-#                     )
-#                     return False
-#             else:
-#                 await ctx.send(
-#                     f"{ctx.author.mention} Please set a bot channel with the `set_bot_channel` command."
-#                 )
-#                 return False
-#         else:
-#             return True
+def is_bot_channel():
+    async def predicate(ctx):
+        if ctx.guild:
+            db = Database()
+            # Query the BotChannel table using SQLAlchemy syntax
+            bot_channel = (
+                db.session.query(CommandsChannel)
+                .filter(CommandsChannel.guild_id == ctx.guild.id)
+                .first()
+            )
+            if bot_channel:
+                if ctx.channel.id == bot_channel.channel_id:
+                    return True
+                else:
+                    await ctx.send(
+                        f"{ctx.author.mention} Please use bot commands in <#{bot_channel.channel_id}>."
+                    )
+                    return False
+            else:
+                await ctx.send(
+                    f"{ctx.author.mention} Please set a bot channel with the `set_bot_channel` command."
+                )
+                return False
+        else:
+            return True
 
-#     return commands.check(predicate)
+    return commands.check(predicate)

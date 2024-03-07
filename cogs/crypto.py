@@ -8,13 +8,15 @@ import aiohttp
 import colorlog
 import disnake
 import matplotlib.pyplot as plt
+import numpy as np
 from disnake import Embed
 from disnake.ext import commands
 
 from config.settings import CG_API_KEY
+from utils.cache import cache_response
 from utils.chart import PlotChart
-from utils.crypto_data import (fetch_coin_data, fetch_current_price,
-                               fetch_historical_data, fetch_new_coins,
+from utils.crypto_data import (fetch_coin_data, fetch_coins_by_category,
+                               fetch_current_price, fetch_new_coins,
                                fetch_top_gainers_losers, fetch_trending_coins,
                                validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
@@ -22,25 +24,55 @@ from utils.paginators import ButtonPaginator as Paginator
 logger = logging.getLogger("CryptoSentinel")
 
 
-def cache_response(timeout):
-    def decorator(func):
-        cache = {}
+def create_category_embed(category, coins_data, sparkline_image_path=None):
+    # Sort coins by market cap to find the top 3
+    top_coins_by_market_cap = sorted(
+        coins_data, key=lambda x: x["market_cap"], reverse=True
+    )[:3]
 
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            key = (args, frozenset(kwargs.items()))
-            result, expiry = cache.get(key, (None, 0))
+    # Find the coin with the highest 24h increase
+    highest_24h_increase = max(
+        coins_data, key=lambda x: x["price_change_percentage_24h"]
+    )
 
-            if time.time() < expiry:
-                return result
+    # Find the coin with the highest 1h increase
+    highest_1h_increase = max(
+        coins_data,
+        key=lambda x: x["price_change_percentage_1h_in_currency"],
+    )
 
-            result = await func(*args, **kwargs)
-            cache[key] = (result, time.time() + timeout)
-            return result
+    embed = disnake.Embed(
+        title=f"Category: {category.capitalize()}",
+        description=f"Top coins in the {category} category based on market cap and price changes.",
+        color=disnake.Color.blue(),
+    )
 
-        return wrapper
+    # Add fields for top coins by market cap
+    for i, coin in enumerate(top_coins_by_market_cap, 1):
+        embed.add_field(
+            name=f"Top {i}: {coin['name']} ({coin['symbol'].upper()})",
+            value=f"Market Cap: ${coin['market_cap']}\nCurrent Price: ${coin['current_price']:.6f}\n24h Change: {coin['price_change_percentage_24h']:.2f}%",
+            inline=False,
+        )
 
-    return decorator
+    # Add field for the highest 24h increase
+    embed.add_field(
+        name=f"Highest 24h Increase: {highest_24h_increase['name']} ({highest_24h_increase['symbol'].upper()})",
+        value=f"Current Price: ${highest_24h_increase['current_price']:.6f}\n24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%",
+        inline=False,
+    )
+
+    # Add field for the highest 1h increase
+    embed.add_field(
+        name=f"Highest 1h Increase: {highest_1h_increase['name']} ({highest_1h_increase['symbol'].upper()})",
+        value=f"Current Price: ${highest_1h_increase['current_price']:.6f}\n1h Change: {highest_1h_increase['price_change_percentage_1h_in_currency']:.2f}%",
+        inline=False,
+    )
+
+    if sparkline_image_path:
+        embed.set_image(url="attachment://sparkline.png")
+
+    return embed
 
 
 class CryptoCommands(commands.Cog):
@@ -243,6 +275,103 @@ class CryptoCommands(commands.Cog):
                 await inter.followup.send(embed=embed)
         else:
             await inter.followup.send("Failed to retrieve trending cryptocurrencies.")
+
+    @commands.slash_command(
+        name="list_categories",
+        description="Lists all cryptocurrency categories from CoinGecko.",
+    )
+    async def list_categories(self, inter: disnake.ApplicationCommandInteraction):
+        """Lists all cryptocurrency categories from CoinGecko."""
+
+        # Fetch categories from CoinGecko
+        url = "https://pro-api.coingecko.com/api/v3/coins/categories/list"
+        headers = {"x-cg-pro-api-key": CG_API_KEY}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    categories = await response.json()
+                else:
+                    logger.error(
+                        f"Failed to fetch categories. Status: {response.status}. Response: {await response.text()}"
+                    )
+                    await inter.followup.send("Failed to retrieve categories.")
+                    return
+
+        # Prepare the categories for pagination, 25 per page
+        category_pages = []
+        for i in range(0, len(categories), 25):
+            embed = disnake.Embed(
+                title=f"Cryptocurrency Categories (Page {i//25 + 1})",
+                description="",
+                color=disnake.Color.blue(),
+            )
+            category_ids = "\n".join(
+                [category["category_id"] for category in categories[i : i + 25]]
+            )
+            embed.add_field(name="Category IDs", value=category_ids, inline=False)
+            category_pages.append(embed)
+
+        # Use Paginator to display the categories
+        paginator = Paginator(self.bot, inter, category_pages)
+        await paginator.run()
+
+    @commands.slash_command(
+        name="category",
+        description="Shows aggregated stats about coins in a specified category.",
+    )
+    async def category(
+        self, inter: disnake.ApplicationCommandInteraction, category: str
+    ):
+        """Shows aggregated stats about coins in a specified category."""
+        await inter.response.defer()
+        coins_data = await fetch_coins_by_category(category)
+
+        if coins_data:
+            # Aggregate sparkline data
+            sparklines = [
+                coin["sparkline_in_7d"]["price"]
+                for coin in coins_data
+                if "sparkline_in_7d" in coin
+                and isinstance(coin["sparkline_in_7d"]["price"], list)
+            ]
+
+            # Check if all sparklines have the same length
+            if sparklines and all(
+                len(sparkline) == len(sparklines[0]) for sparkline in sparklines
+            ):
+                # Calculate the average sparkline
+                avg_sparkline = np.mean(np.array(sparklines), axis=0)
+
+                # Generate a plot
+                plt.figure(figsize=(6, 2))
+                plt.plot(avg_sparkline, color="blue")
+                plt.axis("off")
+
+                # Save the plot as an image
+                sparkline_image_path = "sparkline.png"
+                plt.savefig(sparkline_image_path)
+                plt.close()
+
+                # Create the embed with the sparkline image
+                embed = create_category_embed(
+                    category, coins_data, sparkline_image_path
+                )
+
+                # Send the embed with the image
+                await inter.followup.send(
+                    file=disnake.File(sparkline_image_path, filename="sparkline.png"),
+                    embed=embed,
+                )
+
+                os.remove(sparkline_image_path)
+            else:
+                # Handle the case where sparkline data is not uniform or missing
+                embed = create_category_embed(category, coins_data)
+                await inter.followup.send(embed=embed)
+        else:
+            await inter.followup.send(
+                f"Failed to retrieve data for category: {category}"
+            )
 
 
 def setup(bot):

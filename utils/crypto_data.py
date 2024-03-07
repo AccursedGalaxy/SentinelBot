@@ -319,3 +319,38 @@ async def fetch_trending_coins(api_key=CG_API_KEY):
                     f"Failed to fetch trending coins. Status: {response.status}. Response: {await response.text()}"
                 )
                 return None
+
+
+async def fetch_coins_by_category(category, api_key=CG_API_KEY):
+    """
+    Fetches coins data by category asynchronously.
+
+    Args:
+    category (str): The category of the coins to fetch data for.
+
+    Returns:
+    list: A list of dictionaries containing the fetched coins data.
+    """
+    url = f"https://pro-api.coingecko.com/api/v3/coins/markets"
+    params = {
+        "vs_currency": "usd",
+        "category": category,
+        "per_page": 10,
+        "page": 1,
+        "sparkline": "true",  # Convert boolean to string
+        "price_change_percentage": "1h",
+    }
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status == 200:
+                coins_data = await response.json()
+                return coins_data
+            else:
+                logger.error(
+                    f"Failed to fetch coins by category '{category}'. Status: {response.status}. Response: {await response.text()}"
+                )
+                return []
