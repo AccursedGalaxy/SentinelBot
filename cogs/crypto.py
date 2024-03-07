@@ -30,7 +30,7 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
         coins_data, key=lambda x: x.get("market_cap", 0), reverse=True
     )[:3]
 
-    # Filter out coins where 'price_change_percentage_24h' is None and find the max
+    # Filter out coins where 'price_change_percentage_24h' is None and find the min/max
     valid_24h_changes = [
         coin
         for coin in coins_data
@@ -40,24 +40,15 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
         highest_24h_increase = max(
             valid_24h_changes, key=lambda x: x["price_change_percentage_24h"]
         )
-    else:
-        highest_24h_increase = None
-
-    # Filter out coins where 'price_change_percentage_1h_in_currency' is None and find the max
-    valid_1h_changes = [
-        coin
-        for coin in coins_data
-        if coin.get("price_change_percentage_1h_in_currency") is not None
-    ]
-    if valid_1h_changes:
-        highest_1h_increase = max(
-            valid_1h_changes, key=lambda x: x["price_change_percentage_1h_in_currency"]
+        min_24h_change = min(
+            valid_24h_changes, key=lambda x: x["price_change_percentage_24h"]
         )
     else:
-        highest_1h_increase = None
+        highest_24h_increase = None
+        min_24h_change = None
 
     embed = disnake.Embed(
-        title=f"Category: {category.capitalize()}",
+        title=f"{category.capitalize()} - Category Stats:",
         description=f"Top coins in the {category} category based on market cap and price changes.",
         color=disnake.Color.blue(),
     )
@@ -78,11 +69,11 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
             inline=False,
         )
 
-    # Add field for the highest 1h increase, if available
-    if highest_1h_increase:
+    # Add field for the lowest 24h change, if available
+    if min_24h_change:
         embed.add_field(
-            name=f"Highest 1h Increase: {highest_1h_increase['name']} ({highest_1h_increase['symbol'].upper()})",
-            value=f"Current Price: ${highest_1h_increase['current_price']:.6f}\n1h Change: {highest_1h_increase['price_change_percentage_1h_in_currency']:.2f}%",
+            name=f"Lowest 24h Change: {min_24h_change['name']} ({min_24h_change['symbol'].upper()})",
+            value=f"Current Price: ${min_24h_change['current_price']:.6f}\n24h Change: {min_24h_change['price_change_percentage_24h']:.2f}%",
             inline=False,
         )
 
@@ -117,39 +108,6 @@ class CryptoCommands(commands.Cog):
         await inter.edit_original_response(
             content=f"Current price of {ticker.upper()}: ${price}"
         )
-
-    @commands.slash_command(
-        name="chart",
-        description="Get a chart for a ticker",
-    )
-    async def chart(
-        self,
-        inter: disnake.ApplicationCommandInteraction,
-        symbol: str = commands.Param(description="Cryptocurrency symbol (e.g., BTC)"),
-        timeframe: str = commands.Param(
-            description="Timeframe for the chart (e.g., 1d, 1h)"
-        ),
-    ):
-        """Plot a chart for a given cryptocurrency symbol and timeframe."""
-        await inter.response.defer()
-
-        try:
-            # Call the plot_ohlcv_chart method from PlotChart class
-            chart_file = await PlotChart.plot_ohlcv_chart(symbol, timeframe)
-
-            if chart_file:
-                # Send the chart image
-                await inter.followup.send(file=disnake.File(chart_file))
-                os.remove(chart_file)
-
-            else:
-                await inter.followup.send("Failed to generate chart.")
-
-        except Exception as e:
-            logger.error(f"Error in plot_chart command: {e}")
-            await inter.followup.send(
-                "An error occurred while processing your request."
-            )
 
     @commands.slash_command(name="gainers", description="Shows the top 5 gainers")
     @cache_response(3600)
