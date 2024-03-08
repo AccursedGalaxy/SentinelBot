@@ -1,5 +1,4 @@
 # TODO:
-# - Make sure all imags are deleted after use.
 
 import asyncio
 import functools
@@ -219,62 +218,6 @@ class CryptoCommands(commands.Cog):
                 )
             await inter.followup.send(embed=embed, file=disnake.File(chart_path))
             os.remove(chart_path)
-
-    @commands.slash_command(
-        name="new_listings",
-        description="Shows newly listed cryptocurrencies from CoinGecko",
-    )
-    @cache_response(3600)
-    async def new_listings(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.defer()
-        new_coins = await fetch_new_coins()
-
-        if new_coins:
-            for coin in new_coins[:5]:  # Limiting to 5 coins for brevity
-                # Fetch additional coin data
-                coin_data = await fetch_coin_data(coin["id"])
-
-                embed = disnake.Embed(
-                    title=f"{coin['name']} ({coin['symbol'].upper()})",
-                    description=f"ID: {coin['id']}\n{coin_data['description'][:200]}...",  # Show a snippet of the description
-                    color=disnake.Color.blue(),
-                )
-                embed.add_field(
-                    name="Activated At", value=coin["activated_at"], inline=False
-                )
-                embed.add_field(
-                    name="Sentiment Up Votes",
-                    value=f"{coin_data['sentiment_votes_up_percentage']}%",
-                    inline=True,
-                )
-                embed.add_field(
-                    name="Sentiment Down Votes",
-                    value=f"{coin_data['sentiment_votes_down_percentage']}%",
-                    inline=True,
-                )
-                # Check if market_cap_rank is available
-                market_cap_rank = coin.get(
-                    "market_cap_rank", "N/A"
-                )  # Use 'N/A' if not available
-                embed.add_field(
-                    name="Market Cap Rank",
-                    value=market_cap_rank,
-                    inline=True,
-                )
-
-                # Check if the thumbnail URL is valid
-                thumbnail_url = coin_data["image"]["thumb"]
-                if thumbnail_url.startswith("http://") or thumbnail_url.startswith(
-                    "https://"
-                ):
-                    embed.set_thumbnail(url=thumbnail_url)
-                else:
-                    embed.set_thumbnail(url="https://i.imgur.com/3s9fXtj.png")
-
-                await inter.followup.send(embed=embed)
-
-        else:
-            await inter.followup.send("Failed to retrieve new coin listings.")
 
     @commands.slash_command(
         name="trending", description="Shows trending cryptocurrencies on CoinGecko"
