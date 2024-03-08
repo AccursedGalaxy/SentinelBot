@@ -183,7 +183,7 @@ class CryptoCommands(commands.Cog):
             chart_path = await generate_bar_chart(top_gainers, "gainers")
             embed = disnake.Embed(
                 title="Top 5 Gainers",
-                description="Here are the top 5 gainers with their respective 24h changes.",
+                description="",  # Empty on purpose
                 color=disnake.Color.from_rgb(0, 100, 0),
             )
             for i, coin in enumerate(top_gainers[:5], 1):
@@ -193,6 +193,7 @@ class CryptoCommands(commands.Cog):
                     inline=False,
                 )
             await inter.followup.send(embed=embed, file=disnake.File(chart_path))
+            os.remove(chart_path)
         else:
             await inter.followup.send("No data available for top gainers.")
 
@@ -207,7 +208,7 @@ class CryptoCommands(commands.Cog):
             chart_path = await generate_bar_chart(top_losers, "losers")
             embed = disnake.Embed(
                 title="Top 5 Losers",
-                description="Here are the top 5 losers with their respective 24h changes.",
+                description="",  # Empty on purpose
                 color=disnake.Color.from_rgb(139, 0, 0),
             )
             for i, coin in enumerate(top_losers[:5], 1):
@@ -217,6 +218,7 @@ class CryptoCommands(commands.Cog):
                     inline=False,
                 )
             await inter.followup.send(embed=embed, file=disnake.File(chart_path))
+            os.remove(chart_path)
 
     @commands.slash_command(
         name="new_listings",
