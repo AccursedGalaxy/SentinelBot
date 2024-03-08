@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from disnake.ext import commands
 from PIL import Image
 
-from config.settings import CG_API_KEY
+from config.settings import CATEGORIES, CG_API_KEY
 from logger_config import setup_logging
 from utils.cache import cache_response
 from utils.crypto_data import (fetch_coins_by_category, fetch_current_price,
@@ -82,6 +82,41 @@ async def generate_bar_chart(coins, category):
     return image_path
 
 
+async def generate_pie_chart(coins_data):
+    # Sort coins by market cap
+    sorted_coins = sorted(
+        coins_data,
+        key=lambda x: x.get("market_cap", 0) if x.get("market_cap") is not None else 0,
+        reverse=True,
+    )
+    labels = [coin["name"] for coin in sorted_coins[:5]]
+    sizes = [
+        coin["market_cap"] if coin["market_cap"] is not None else 0
+        for coin in sorted_coins[:5]
+    ]
+    # Ensure that the pie chart includes other coins as well
+    labels.append("Others")
+    sizes.append(
+        sum(
+            coin["market_cap"] if coin["market_cap"] is not None else 0
+            for coin in sorted_coins[5:]
+        )
+    )
+
+    # Check if all sizes are zero, which would cause an error in pie chart generation
+    if all(size == 0 for size in sizes):
+        return None  # Return None or handle this case as needed
+
+    fig1, ax1 = plt.subplots()
+    ax1.pie(sizes, labels=labels, autopct="%1.1f%%", startangle=90)
+    ax1.axis("equal")  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+    pie_chart_path = "market_cap_distribution.png"
+    plt.savefig(pie_chart_path)
+    plt.close()
+    return pie_chart_path
+
+
 def format_currency(value: float) -> str:
     """Format a float as a currency string, converting to a more readable format."""
     if value >= 1_000_000_000:
@@ -95,70 +130,33 @@ def format_currency(value: float) -> str:
 
 
 def create_category_embed(
-    category: str, coins_data: List[Dict], sparkline_image_path: Optional[str] = None
+    category: str,
+    coins_data: List[Dict],
+    sparkline_image_path: Optional[str] = None,
+    pie_chart_path: Optional[str] = None,
 ) -> disnake.Embed:
-    # Sort coins by market cap to find the top 3
-    top_coins_by_market_cap = sorted(
-        coins_data, key=lambda x: x.get("market_cap", 0), reverse=True
-    )[:3]
-
-    # Filter out coins where 'price_change_percentage_24h' is None and find the min/max
-    valid_24h_changes = [
-        coin
-        for coin in coins_data
-        if coin.get("price_change_percentage_24h") is not None
-    ]
-    highest_24h_increase = max(
-        valid_24h_changes, key=lambda x: x["price_change_percentage_24h"], default=None
-    )
-    min_24h_change = min(
-        valid_24h_changes, key=lambda x: x["price_change_percentage_24h"], default=None
-    )
-
     embed = disnake.Embed(
         title=f"{category.capitalize()} - Category Stats",
-        description=f"",  # Empty on purpose
+        description=f"Overview of the {category} category",
         color=disnake.Color.blue(),
     )
 
-    # Add fields for top coins by market cap
-    for i, coin in enumerate(top_coins_by_market_cap, 1):
-        price_change = coin.get("price_change_percentage_24h", "N/A")
-        price_change_str = f"{price_change:.2f}%" if price_change != "N/A" else "N/A"
+    # Top gainers
+    top_gainers = sorted(
+        coins_data, key=lambda x: x.get("price_change_percentage_24h", 0), reverse=True
+    )[:3]
+    for gainer in top_gainers:
         embed.add_field(
-            name=f"Top {i}: {coin['name']} ({coin['symbol'].upper()})",
-            value=(
-                f"Market Cap: {format_currency(coin['market_cap'])}\n"
-                f"Current Price: ${format_number(coin['current_price'])}\n"
-                f"24h Change: {price_change_str}"
-            ),
-            inline=False,
-        )
-
-    # Add field for the highest 24h increase, if available
-    if highest_24h_increase:
-        embed.add_field(
-            name=f"Highest 24h Increase: {highest_24h_increase['name']} ({highest_24h_increase['symbol'].upper()})",
-            value=(
-                f"Current Price: ${format_number(highest_24h_increase['current_price'])}\n"
-                f"24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%"
-            ),
-            inline=False,
-        )
-
-    # Add field for the lowest 24h change, if available
-    if min_24h_change:
-        embed.add_field(
-            name=f"Lowest 24h Change: {min_24h_change['name']} ({min_24h_change['symbol'].upper()})",
-            value=(
-                f"Current Price: ${format_number(min_24h_change['current_price'])}\n"
-                f"24h Change: {min_24h_change['price_change_percentage_24h']:.2f}%"
-            ),
+            name=f"{gainer['name']} ({gainer['symbol'].upper()})",
+            value=f"Price: ${format_number(gainer['current_price'])}\n24h Change: {gainer['price_change_percentage_24h']:.2f}%",
             inline=False,
         )
 
     if sparkline_image_path:
         embed.set_image(url="attachment://sparkline.png")
+
+    if pie_chart_path:
+        embed.set_thumbnail(url=f"attachment://{pie_chart_path}")
 
     return embed
 
@@ -313,10 +311,10 @@ class CryptoCommands(commands.Cog):
 
     @commands.slash_command(
         name="list_categories",
-        description="Lists all cryptocurrency categories from CoinGecko.",
+        description="Lists selected cryptocurrency categories from CoinGecko.",
     )
     async def list_categories(self, inter: disnake.ApplicationCommandInteraction):
-        """Lists all cryptocurrency categories from CoinGecko."""
+        """Lists selected cryptocurrency categories from CoinGecko."""
 
         # Fetch categories from CoinGecko
         url = "https://pro-api.coingecko.com/api/v3/coins/categories/list"
@@ -332,20 +330,29 @@ class CryptoCommands(commands.Cog):
                     await inter.followup.send("Failed to retrieve categories.")
                     return
 
-        # Prepare the categories for pagination, 25 per page
+        # Filter the fetched categories to include only those in the CATEGORIES env
+        filtered_category_ids = CATEGORIES.split(",")
+        filtered_categories = [
+            category
+            for category in categories
+            if category["category_id"] in filtered_category_ids
+        ]
+        # Prepare the filtered categories for pagination, 25 per page
         category_pages = []
         items_per_page = 25
-        for i in range(0, len(categories), items_per_page):
+        for i in range(0, len(filtered_categories), items_per_page):
             embed = disnake.Embed(
                 title=f"Cryptocurrency Categories (Page {i // items_per_page + 1})",
-                description="",  # This is empty on porpuse
+                description="",  # This is empty on purpose
                 color=disnake.Color.blue(),
             )
             # Adjust the index for each item based on the current page
             category_list = "\n".join(
                 [
                     f"{i + index + 1}. {category['category_id']}"
-                    for index, category in enumerate(categories[i : i + items_per_page])
+                    for index, category in enumerate(
+                        filtered_categories[i : i + items_per_page]
+                    )
                 ]
             )
             embed.add_field(
@@ -363,6 +370,7 @@ class CryptoCommands(commands.Cog):
         name="category",
         description="Shows aggregated stats about coins in a specified category.",
     )
+    @cache_response(3600)
     async def category(
         self, inter: disnake.ApplicationCommandInteraction, category: str
     ):
@@ -375,6 +383,9 @@ class CryptoCommands(commands.Cog):
                 f"Failed to retrieve data for category: {category}"
             )
             return
+
+        # Generate a pie chart for the market cap distribution
+        pie_chart_path = await generate_pie_chart(coins_data)
 
         # Extract sparkline data, ensuring each is a valid list of prices
         sparklines = [
@@ -410,12 +421,22 @@ class CryptoCommands(commands.Cog):
         plt.close()
 
         # Create and send the embed with the sparkline image
-        embed = create_category_embed(category, coins_data, sparkline_image_path)
+        files_to_send = [disnake.File(sparkline_image_path, filename="sparkline.png")]
+        if pie_chart_path:
+            files_to_send.append(
+                disnake.File(pie_chart_path, filename="market_cap_distribution.png")
+            )
+
+        embed = create_category_embed(
+            category, coins_data, sparkline_image_path, pie_chart_path
+        )
         await inter.followup.send(
-            file=disnake.File(sparkline_image_path, filename="sparkline.png"),
+            files=files_to_send,
             embed=embed,
         )
         os.remove(sparkline_image_path)
+        if pie_chart_path:
+            os.remove(pie_chart_path)
 
 
 def setup(bot):

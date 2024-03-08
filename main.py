@@ -133,29 +133,29 @@ async def get_alerts_channel():
         Database.close_session()
 
 
-@tasks.loop(hours=1)  # Adjust the interval as needed
-async def send_money_flow_report():
-    channel = bot.get_channel(MONEY_FLOW_CHANNEL)
-    if channel:
-        # Generate the report files and create the embed
-        embed, file_objects = await generate_report()
+# @tasks.loop(hours=1)  # Adjust the interval as needed
+# async def send_money_flow_report():
+#     channel = bot.get_channel(MONEY_FLOW_CHANNEL)
+#     if channel:
+#         # Generate the report files and create the embed
+#         embed, file_objects = await generate_report()
 
-        # Send the embed and files
-        if file_objects:
-            await channel.send(embed=embed, files=file_objects)
-            cleanup_report_files(
-                [f.filename for f in file_objects]
-            )  # Cleanup based on the actual filenames
-        else:
-            logger.warning("No report was generated.")
-
-
-@send_money_flow_report.before_loop
-async def before_send_money_flow_report():
-    await bot.wait_until_ready()
+#         # Send the embed and files
+#         if file_objects:
+#             await channel.send(embed=embed, files=file_objects)
+#             cleanup_report_files(
+#                 [f.filename for f in file_objects]
+#             )  # Cleanup based on the actual filenames
+#         else:
+#             logger.warning("No report was generated.")
 
 
-send_money_flow_report.start()
+# @send_money_flow_report.before_loop
+# async def before_send_money_flow_report():
+#     await bot.wait_until_ready()
+
+
+# send_money_flow_report.start()
 
 
 # Graceful shutdown
