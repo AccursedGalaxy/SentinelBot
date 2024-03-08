@@ -1,28 +1,23 @@
 # TODO:
 
 import asyncio
-import functools
 import io
 import os
-import time
 
 import aiohttp
 import disnake
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
-from disnake import Embed
 from disnake.ext import commands
 from PIL import Image
 
 from config.settings import CG_API_KEY
 from logger_config import setup_logging
 from utils.cache import cache_response
-from utils.chart import PlotChart
-from utils.crypto_data import (fetch_category_info, fetch_coin_data,
-                               fetch_coins_by_category, fetch_current_price,
-                               fetch_new_coins, fetch_top_gainers_losers,
-                               fetch_trending_coins, validate_ticker)
+from utils.crypto_data import (fetch_coins_by_category, fetch_current_price,
+                               fetch_top_gainers_losers, fetch_trending_coins,
+                               validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = setup_logging()
