@@ -332,16 +332,25 @@ class CryptoCommands(commands.Cog):
 
         # Prepare the categories for pagination, 25 per page
         category_pages = []
-        for i in range(0, len(categories), 25):
+        items_per_page = 25
+        for i in range(0, len(categories), items_per_page):
             embed = disnake.Embed(
-                title=f"Cryptocurrency Categories (Page {i//25 + 1})",
-                description="",
+                title=f"Cryptocurrency Categories (Page {i // items_per_page + 1})",
+                description="",  # This is empty on porpuse
                 color=disnake.Color.blue(),
             )
-            category_ids = "\n".join(
-                [category["category_id"] for category in categories[i : i + 25]]
+            # Adjust the index for each item based on the current page
+            category_list = "\n".join(
+                [
+                    f"{i + index + 1}. {category['category_id']}"
+                    for index, category in enumerate(categories[i : i + items_per_page])
+                ]
             )
-            embed.add_field(name="Category IDs", value=category_ids, inline=False)
+            embed.add_field(
+                name="Categories",
+                value=category_list or "No categories available",
+                inline=False,
+            )
             category_pages.append(embed)
 
         # Use Paginator to display the categories
