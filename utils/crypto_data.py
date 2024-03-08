@@ -354,3 +354,18 @@ async def fetch_coins_by_category(category, api_key=CG_API_KEY):
                     f"Failed to fetch coins by category '{category}'. Status: {response.status}. Response: {await response.text()}"
                 )
                 return []
+
+
+async def fetch_category_info(api_key=CG_API_KEY):
+    url = "https://pro-api.coingecko.com/api/v3/coins/categories"
+    headers = {"x-cg-pro-api-key": "CG-6sKW9pMTnWQ7oWN5bME8edSX"}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data
+            else:
+                logger.error(
+                    f"Failed to fetch category info. Status: {response.status}. Response: {await response.text()}"
+                )
+                return None

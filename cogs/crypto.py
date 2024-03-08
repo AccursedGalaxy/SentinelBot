@@ -9,19 +9,59 @@ import colorlog
 import disnake
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 from disnake import Embed
 from disnake.ext import commands
 
 from config.settings import CG_API_KEY
 from utils.cache import cache_response
 from utils.chart import PlotChart
-from utils.crypto_data import (fetch_coin_data, fetch_coins_by_category,
-                               fetch_current_price, fetch_new_coins,
-                               fetch_top_gainers_losers, fetch_trending_coins,
-                               validate_ticker)
+from utils.crypto_data import (fetch_category_info, fetch_coin_data,
+                               fetch_coins_by_category, fetch_current_price,
+                               fetch_new_coins, fetch_top_gainers_losers,
+                               fetch_trending_coins, validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = logging.getLogger("CryptoSentinel")
+
+
+def format_number(value):
+    if value == 0:
+        return "0"
+    elif abs(value) < 1e-6:
+        return f"{value:.8f}"  # For very small numbers, show 8 decimal places
+    elif abs(value) < 1e-3:
+        return f"{value:.6f}"  # For small numbers, show 6 decimal places
+    else:
+        return f"{value:.2f}"  # For larger numbers, show 2 decimal places
+
+
+async def generate_bar_chart(coins, category):
+    coin_names = [coin["name"] for coin in coins]
+    # Ensure we're using the correct key for price changes
+    price_changes = [coin["usd_24h_change"] for coin in coins]
+
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=coin_names,
+                y=price_changes,
+                marker_color="green" if category == "gainers" else "red",
+            )
+        ]
+    )
+
+    fig.update_layout(
+        title=f"Top 5 {category.capitalize()}",
+        xaxis_title="Coin",
+        yaxis_title="24h Change (%)",
+        template="plotly_dark",
+    )
+
+    # Save the figure to a file
+    image_path = f"{category}_chart.png"
+    fig.write_image(image_path)
+    return image_path
 
 
 def create_category_embed(category, coins_data, sparkline_image_path=None):
@@ -116,20 +156,22 @@ class CryptoCommands(commands.Cog):
         top_gainers = await fetch_top_gainers_losers(
             api_key=CG_API_KEY, category="gainers"
         )
-        for coin in top_gainers[:5]:
+        if top_gainers:
+            chart_path = await generate_bar_chart(top_gainers, "gainers")
             embed = disnake.Embed(
-                title=f"{coin['name']} ({coin['symbol'].upper()})",
+                title="Top 5 Gainers",
+                description="Here are the top 5 gainers with their respective 24h changes.",
                 color=disnake.Color.green(),
             )
-            embed.set_thumbnail(url=coin["image"])
-            embed.add_field(name="Price", value=f"${coin['usd']:.6f}", inline=True)
-            embed.add_field(
-                name="24h Change", value=f"{coin['usd_24h_change']:.2f}%", inline=True
-            )
-            embed.add_field(
-                name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
-            )
-            await inter.followup.send(embed=embed)
+            for i, coin in enumerate(top_gainers[:5], 1):
+                embed.add_field(
+                    name=f"{i}. {coin['name']}",
+                    value=f"Price: ${format_number(coin['usd'])}\n24h Change: {format_number(coin['usd_24h_change'])}%",
+                    inline=False,
+                )
+            await inter.followup.send(embed=embed, file=disnake.File(chart_path))
+        else:
+            await inter.followup.send("No data available for top gainers.")
 
     @commands.slash_command(name="losers", description="Shows the top 5 losers")
     @cache_response(3600)
@@ -138,20 +180,22 @@ class CryptoCommands(commands.Cog):
         top_losers = await fetch_top_gainers_losers(
             api_key=CG_API_KEY, category="losers"
         )
-        for coin in top_losers[:5]:
+        if top_losers:
+            chart_path = await generate_bar_chart(top_losers, "losers")
             embed = disnake.Embed(
-                title=f"{coin['name']} ({coin['symbol'].upper()})",
+                title="Top 5 Losers",
+                description="Here are the top 5 losers with their respective 24h changes.",
                 color=disnake.Color.red(),
             )
-            embed.set_thumbnail(url=coin["image"])
-            embed.add_field(name="Price", value=f"${coin['usd']:.6f}", inline=True)
-            embed.add_field(
-                name="24h Change", value=f"{coin['usd_24h_change']:.2f}%", inline=True
-            )
-            embed.add_field(
-                name="Market Cap Rank", value=f"{coin['market_cap_rank']}", inline=True
-            )
-            await inter.followup.send(embed=embed)
+            for i, coin in enumerate(top_losers[:5], 1):
+                embed.add_field(
+                    name=f"{i}. {coin['name']}",
+                    value=f"Price: ${format_number(coin['usd'])}\n24h Change: {format_number(coin['usd_24h_change'])}%",
+                    inline=False,
+                )
+            await inter.followup.send(embed=embed, file=disnake.File(chart_path))
+        else:
+            await inter.followup.send("No data available for top losers.")
 
     @commands.slash_command(
         name="new_listings",
