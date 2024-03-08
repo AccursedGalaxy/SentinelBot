@@ -2,6 +2,8 @@ import asyncio
 import os
 import sys
 
+import disnake
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
@@ -36,7 +38,7 @@ async def fetch_coins_by_category(category, api_key=CG_API_KEY):
         params = {
             "vs_currency": "usd",
             "category": category,
-            "per_page": 250,
+            "per_page": 350,
             "page": page,
             "sparkline": "false",
             "price_change_percentage": "1h,24h,7d,30d,1y",
@@ -47,6 +49,7 @@ async def fetch_coins_by_category(category, api_key=CG_API_KEY):
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status == 200:
                     page_data = await response.json()
+
                     if not page_data:
                         break
                     coins_data.extend(page_data)
@@ -74,23 +77,23 @@ async def fetch_category_info(api_key=CG_API_KEY):
 
 
 async def analyze_categories(categories):
-    total_volume = sum(
+    total_volume_24h = sum(
         category["volume_24h"] for category in categories if category["volume_24h"]
     )
-    logger.info(f"Total volume: {total_volume}")
-    total_market_cap_change = sum(
+    logger.info(f"Total volume: {total_volume_24h}")
+    total_market_cap_change_24h = sum(
         category["market_cap_change_24h"]
         for category in categories
         if category["market_cap_change_24h"]
     )
-    logger.info(f"Total market cap change: {total_market_cap_change}")
+    logger.info(f"Total market cap change: {total_market_cap_change_24h}")
 
     money_flow_analysis = {}
     for category in categories:
         if category["volume_24h"] and category["market_cap_change_24h"]:
-            volume_percentage = category["volume_24h"] / total_volume
+            volume_percentage = category["volume_24h"] / total_volume_24h
             market_cap_change_percentage = (
-                category["market_cap_change_24h"] / total_market_cap_change
+                category["market_cap_change_24h"] / total_market_cap_change_24h
             )
             normalized_money_flow = (
                 volume_percentage - market_cap_change_percentage
@@ -106,7 +109,6 @@ async def analyze_categories(categories):
     )[:5]
     # log top categories names
     logger.info(f"Top categories: {[category['name'] for category in top_categories]}")
-    # TODO: use the total volume, total market cap change as well to provide insights.
     return money_flow_analysis, top_categories
 
 
@@ -164,10 +166,19 @@ def plot_money_flow(money_flow_analysis):
 
 
 async def generate_report():
+    embed = disnake.Embed(
+        title="Crypto Category Money Flow Report",
+        description="This report provides an in-depth analysis of the money flow within various cryptocurrency categories, highlighting significant trends and movements.",
+        color=0x1E90FF,
+    )
+
+    # Generate your plots and data
     report_files = []
+    file_objects = []
     categories = await fetch_category_info()
     if categories:
         money_flow_analysis, top_categories = await analyze_categories(categories)
+
         # Generate performance plot
         performance_plot_filename = "top_categories_by_normalized_money_flow.png"
         plot_performance(top_categories, "Top Categories by Normalized Money Flow")
@@ -178,10 +189,15 @@ async def generate_report():
         plot_money_flow(money_flow_analysis)
         report_files.append(money_flow_plot_filename)
 
-        # TODO: Add more sections to the report as per requirements
-        # If additional plots or text files are generated, append their paths to report_files
+        # Create file objects and embed fields for each plot
+        for file_path in report_files:
+            file = disnake.File(file_path, filename=file_path)
+            file_objects.append(file)
+            # TODO: Add a field to the embed for each plot providing additonl information and data points.
 
-    return report_files
+        # TODO: Add any additional insights or conclusions at the end of the embed
+
+    return embed, file_objects
 
 
 if __name__ == "__main__":
