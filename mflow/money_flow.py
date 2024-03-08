@@ -2,6 +2,8 @@ import asyncio
 import os
 import sys
 
+import disnake
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
@@ -164,10 +166,19 @@ def plot_money_flow(money_flow_analysis):
 
 
 async def generate_report():
+    embed = disnake.Embed(
+        title="Crypto Category Money Flow Report",
+        description="This report provides an in-depth analysis of the money flow within various cryptocurrency categories, highlighting significant trends and movements.",
+        color=0x1E90FF,
+    )
+
+    # Generate your plots and data
     report_files = []
+    file_objects = []
     categories = await fetch_category_info()
     if categories:
         money_flow_analysis, top_categories = await analyze_categories(categories)
+
         # Generate performance plot
         performance_plot_filename = "top_categories_by_normalized_money_flow.png"
         plot_performance(top_categories, "Top Categories by Normalized Money Flow")
@@ -178,10 +189,15 @@ async def generate_report():
         plot_money_flow(money_flow_analysis)
         report_files.append(money_flow_plot_filename)
 
-        # TODO: Add more sections to the report as per requirements
-        # If additional plots or text files are generated, append their paths to report_files
+        # Create file objects and embed fields for each plot
+        for file_path in report_files:
+            file = disnake.File(file_path, filename=file_path)
+            file_objects.append(file)
+            # TODO: Add a field to the embed for each plot providing additonl information and data points.
 
-    return report_files
+        # TODO: Add any additional insights or conclusions at the end of the embed
+
+    return embed, file_objects
 
 
 if __name__ == "__main__":
