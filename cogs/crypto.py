@@ -38,25 +38,34 @@ def format_number(value):
 
 async def generate_bar_chart(coins, category):
     coin_names = [coin["name"] for coin in coins]
-    # Ensure we're using the correct key for price changes
     price_changes = [coin["usd_24h_change"] for coin in coins]
 
+    # Using softer color shades
+    color_gainers = "#006400"
+    color_losers = "#8B0000"
+    colors = [color_gainers if category == "gainers" else color_losers for _ in coins]
+
+    # Create the figure
     fig = go.Figure(
         data=[
             go.Bar(
-                x=coin_names,
-                y=price_changes,
-                marker_color="green" if category == "gainers" else "red",
+                x=coin_names, y=price_changes, marker_color=colors, text=price_changes
             )
         ]
     )
 
+    # Customize layout
     fig.update_layout(
         title=f"Top 5 {category.capitalize()}",
         xaxis_title="Coin",
         yaxis_title="24h Change (%)",
         template="plotly_dark",
+        showlegend=False,
     )
+
+    # Improve legibility
+    fig.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
+    fig.update_layout(uniformtext_minsize=8, uniformtext_mode="hide")
 
     # Save the figure to a file
     image_path = f"{category}_chart.png"
@@ -161,7 +170,7 @@ class CryptoCommands(commands.Cog):
             embed = disnake.Embed(
                 title="Top 5 Gainers",
                 description="Here are the top 5 gainers with their respective 24h changes.",
-                color=disnake.Color.green(),
+                color=disnake.Color.from_rgb(0, 100, 0),
             )
             for i, coin in enumerate(top_gainers[:5], 1):
                 embed.add_field(
@@ -185,7 +194,7 @@ class CryptoCommands(commands.Cog):
             embed = disnake.Embed(
                 title="Top 5 Losers",
                 description="Here are the top 5 losers with their respective 24h changes.",
-                color=disnake.Color.red(),
+                color=disnake.Color.from_rgb(139, 0, 0),
             )
             for i, coin in enumerate(top_losers[:5], 1):
                 embed.add_field(
@@ -194,8 +203,6 @@ class CryptoCommands(commands.Cog):
                     inline=False,
                 )
             await inter.followup.send(embed=embed, file=disnake.File(chart_path))
-        else:
-            await inter.followup.send("No data available for top losers.")
 
     @commands.slash_command(
         name="new_listings",
