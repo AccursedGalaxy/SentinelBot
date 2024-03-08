@@ -133,26 +133,26 @@ async def get_alerts_channel():
         Database.close_session()
 
 
-# @tasks.loop(hours=24)  # Adjust the interval as needed
-# async def send_money_flow_report():
-#     channel = bot.get_channel(MONEY_FLOW_CHANNEL)
-#     if channel:
-#         report_files = await generate_report()
-#         if report_files is not None:
-#             for file_path in report_files:
-#                 if os.path.exists(file_path):
-#                     await channel.send(file=disnake.File(file_path))
-#             cleanup_report_files(report_files)
-#         else:
-#             logger.warning("No report was generated.")
+@tasks.loop(hours=24)  # Adjust the interval as needed
+async def send_money_flow_report():
+    channel = bot.get_channel(MONEY_FLOW_CHANNEL)
+    if channel:
+        report_files = await generate_report()
+        if report_files is not None:
+            for file_path in report_files:
+                if os.path.exists(file_path):
+                    await channel.send(file=disnake.File(file_path))
+            cleanup_report_files(report_files)
+        else:
+            logger.warning("No report was generated.")
 
 
-# @send_money_flow_report.before_loop
-# async def before_send_money_flow_report():
-#     await bot.wait_until_ready()
+@send_money_flow_report.before_loop
+async def before_send_money_flow_report():
+    await bot.wait_until_ready()
 
 
-# send_money_flow_report.start()
+send_money_flow_report.start()
 
 
 # Graceful shutdown
