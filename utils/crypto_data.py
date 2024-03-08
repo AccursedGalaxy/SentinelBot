@@ -313,12 +313,13 @@ async def fetch_trending_coins(api_key=CG_API_KEY):
         async with session.get(url, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
-                return data
+                # Ensure we return the list of coins correctly
+                return data.get("coins", [])
             else:
                 logger.error(
                     f"Failed to fetch trending coins. Status: {response.status}. Response: {await response.text()}"
                 )
-                return None
+                return []
 
 
 async def fetch_coins_by_category(category, api_key=CG_API_KEY):
