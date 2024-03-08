@@ -1,3 +1,7 @@
+# TODO:
+# - Make sure all imags are deleted after use.
+
+import asyncio
 import functools
 import io
 import os
@@ -10,6 +14,7 @@ import numpy as np
 import plotly.graph_objects as go
 from disnake import Embed
 from disnake.ext import commands
+from PIL import Image
 
 from config.settings import CG_API_KEY
 from logger_config import setup_logging
@@ -27,12 +32,22 @@ logger = setup_logging()
 def format_number(value):
     if value == 0:
         return "0"
+    elif abs(value) < 1e-9:
+        return f"{value:.10f}"  # For very small numbers, show 10 decimal places
     elif abs(value) < 1e-6:
         return f"{value:.8f}"  # For very small numbers, show 8 decimal places
     elif abs(value) < 1e-3:
         return f"{value:.6f}"  # For small numbers, show 6 decimal places
     else:
         return f"{value:.2f}"  # For larger numbers, show 2 decimal places
+
+
+async def download_image(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                image_data = await response.read()
+                return Image.open(io.BytesIO(image_data))
 
 
 async def generate_bar_chart(coins, category):
@@ -273,6 +288,22 @@ class CryptoCommands(commands.Cog):
                 description="",
                 color=disnake.Color.blue(),
             )
+            # Download the thumbnail images for the top 5 trending coins
+            images = await asyncio.gather(
+                *(download_image(coin["item"]["thumb"]) for coin in trending_coins[:5])
+            )
+
+            total_width = sum(image.width for image in images)
+            total_height = max(image.height for image in images)
+            collage = Image.new("RGB", (total_width, total_height))
+
+            x_offset = 0
+            for image in images:
+                collage.paste(image, (x_offset, 0))
+                x_offset += image.width
+
+            collage_path = "collage.png"
+            collage.save(collage_path)
 
             # Initialize an empty string to collect coin details
             coin_details_str = ""
@@ -282,13 +313,14 @@ class CryptoCommands(commands.Cog):
                 coin_details = coin.get("item", {})
                 coin_name = coin_details.get("name", "N/A")
                 coin_symbol = coin_details.get("symbol", "N/A").upper()
-                market_cap_rank = coin_details.get("market_cap_rank", "N/A")
                 price = coin_details.get("data", {}).get("price", "N/A")
                 change_24h = (
                     coin_details.get("data", {})
                     .get("price_change_percentage_24h", {})
                     .get("usd", "N/A")
                 )
+                market_cap = coin_details.get("data", {}).get("market_cap", "N/A")
+                total_volume = coin_details.get("data", {}).get("total_volume", "N/A")
 
                 # Format numbers and percentages
                 if isinstance(price, (int, float)):
@@ -297,14 +329,21 @@ class CryptoCommands(commands.Cog):
                     change_24h = f"{change_24h:.2f}%"
 
                 coin_details_str += f"**{coin_name} ({coin_symbol})**\n"
-                coin_details_str += f"Market Cap Rank: {market_cap_rank}\n"
                 coin_details_str += f"Price: {price}\n"
-                coin_details_str += f"24h Change: {change_24h}\n\n"
+                coin_details_str += f"24h Change: {change_24h}\n"
+                coin_details_str += f"Market Cap: {market_cap}\n"
+                coin_details_str += f"Total Volume: {total_volume}\n\n"
 
             # Add the consolidated coin details to the embed
             embed.add_field(name="", value=coin_details_str, inline=False)
 
-            await inter.followup.send(embed=embed)
+            # Send the embed with the collage
+            await inter.followup.send(
+                file=disnake.File(collage_path, filename="collage.png"), embed=embed
+            )
+
+            # Clean up the collage image
+            os.remove(collage_path)
 
         else:
             await inter.followup.send("Failed to retrieve trending coins.")
