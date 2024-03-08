@@ -1,28 +1,19 @@
 import asyncio
-import logging
 import os
 import signal
 import sys
 
-import colorlog
 import disnake
 from disnake.ext import commands
 
 from config.settings import TEST_GUILDS, TOKEN
 from data.db import Database
 from data.models import Guild, User
+from logger_config import setup_logging
+
+logger = setup_logging()
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Configure logging
-handler = colorlog.StreamHandler()
-handler.setFormatter(
-    colorlog.ColoredFormatter("%(log_color)s%(levelname)s:%(name)s:%(message)s")
-)
-
-logger = colorlog.getLogger("Sentinel")
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
 
 # Bot initialization
 intents = disnake.Intents.all()

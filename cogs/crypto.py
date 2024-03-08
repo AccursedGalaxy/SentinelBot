@@ -1,11 +1,9 @@
 import functools
 import io
-import logging
 import os
 import time
 
 import aiohttp
-import colorlog
 import disnake
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,6 +12,7 @@ from disnake import Embed
 from disnake.ext import commands
 
 from config.settings import CG_API_KEY
+from logger_config import setup_logging
 from utils.cache import cache_response
 from utils.chart import PlotChart
 from utils.crypto_data import (fetch_category_info, fetch_coin_data,
@@ -22,7 +21,7 @@ from utils.crypto_data import (fetch_category_info, fetch_coin_data,
                                fetch_trending_coins, validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
-logger = logging.getLogger("CryptoSentinel")
+logger = setup_logging()
 
 
 def format_number(value):

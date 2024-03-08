@@ -1,17 +1,9 @@
-import logging
-
-import colorlog
 import disnake
 from disnake.ext import commands
 
-# Set up colorful logging
-handler = colorlog.StreamHandler()
-handler.setFormatter(
-    colorlog.ColoredFormatter("%(log_color)s%(asctime)s - %(levelname)s - %(message)s")
-)
+from logger_config import setup_logging
 
-logger = colorlog.getLogger("Sentinel")
-logger.setLevel(logging.INFO)
+logger = setup_logging()
 
 
 # Paginator class

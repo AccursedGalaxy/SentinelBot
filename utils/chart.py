@@ -7,7 +7,9 @@ import colorlog
 import pandas as pd
 import plotly.graph_objects as go
 
-logger = colorlog.getLogger("CryptoSentinel")
+from logger_config import setup_logging
+
+logger = setup_logging()
 
 
 class PlotChart:

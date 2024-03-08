@@ -1,12 +1,10 @@
-# database models
-import logging
-
-import colorlog
 from sqlalchemy import (BigInteger, Boolean, Column, DateTime, Float, Integer,
                         String, Text)
 from sqlalchemy.ext.declarative import declarative_base
 
-logger = logging.getLogger("Sentinel")
+from logger_config import setup_logging
+
+logger = setup_logging()
 
 Base = declarative_base()
 

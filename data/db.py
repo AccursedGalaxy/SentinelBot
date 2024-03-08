@@ -1,14 +1,12 @@
-# db.py
-import logging
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from config.settings import SQL_DATABASE_URL
+from logger_config import setup_logging
 
 from .models import Base
 
-logger = logging.getLogger("Sentinel")
+logger = setup_logging()
 
 engine = create_engine(SQL_DATABASE_URL)
 session_factory = sessionmaker(bind=engine)

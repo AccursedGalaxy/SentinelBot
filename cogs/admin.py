@@ -1,14 +1,13 @@
-import logging
-
 import disnake
 from disnake.ext import commands
 
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
+from logger_config import setup_logging
 from utils.decorators import is_admin
 from utils.paginators import ButtonPaginator as Paginator
 
-logger = logging.getLogger("Sentinel")
+logger = setup_logging()
 
 
 class AdminCommands(commands.Cog, name="Admin Commands"):

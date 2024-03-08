@@ -1,22 +1,14 @@
 import asyncio
-import logging
 import time
 
 import aiohttp
 import ccxt.async_support as ccxt
-import colorlog
 import requests
 
 from config.settings import CG_API_KEY, CMC_API_KEY
+from logger_config import setup_logging
 
-# Set up colorful logging
-handler = colorlog.StreamHandler()
-handler.setFormatter(
-    colorlog.ColoredFormatter("%(log_color)s%(asctime)s - %(levelname)s - %(message)s")
-)
-
-logger = colorlog.getLogger("CryptoBettingBot")
-logger.setLevel(logging.INFO)
+logger = setup_logging()
 
 
 async def get_exchange(exchange_id):

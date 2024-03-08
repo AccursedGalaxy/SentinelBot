@@ -1,6 +1,3 @@
-import logging
-
-import colorlog
 import disnake
 from disnake.ext import commands
 from disnake.ext.commands import CheckFailure
@@ -8,14 +5,9 @@ from disnake.ext.commands import CheckFailure
 from config.settings import CREATOR_ID
 from data.db import Database
 from data.models import CommandsChannel
+from logger_config import setup_logging
 
-# Logging setup
-handler = colorlog.StreamHandler()
-handler.setFormatter(
-    colorlog.ColoredFormatter("%(log_color)s%(levelname)s:%(name)s:%(message)s")
-)
-
-logger = colorlog.getLogger("Sentinel")
+logger = setup_logging()
 
 
 def is_creator():

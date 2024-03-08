@@ -1,11 +1,10 @@
-import logging
-
 import disnake
 from disnake.ext import commands
 
+from logger_config import setup_logging
 from utils.paginators import ButtonPaginator as Paginator
 
-logger = logging.getLogger("Sentinel")
+logger = setup_logging()
 
 
 class HelpCommands(commands.Cog):
