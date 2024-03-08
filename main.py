@@ -4,12 +4,13 @@ import signal
 import sys
 
 import disnake
-from disnake.ext import commands
+from disnake.ext import commands, tasks
 
 from config.settings import TEST_GUILDS, TOKEN
 from data.db import Database
-from data.models import Guild, User
+from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
+from mflow.money_flow import cleanup_report_files, generate_report
 
 logger = setup_logging("Sentinel", "green")
 
@@ -18,6 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Bot initialization
 intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
+MONEY_FLOW_CHANNEL = 1186336783261249638
 
 
 # Bot events
@@ -116,6 +118,41 @@ async def load_cogs():
                 logger.info("Loaded Cog: %s", filename)
             except Exception as e:
                 logger.exception("Failed to load cog: %s", e)
+
+
+# get alerts channel ID for the guild
+async def get_alerts_channel():
+    session = Database.get_session()
+    try:
+        alerts_channel = (
+            session.query(AlertsChannel).filter_by(guild_id=TEST_GUILDS).first()
+        )
+        if alerts_channel:
+            return alerts_channel.channel_id
+    finally:
+        Database.close_session()
+
+
+# @tasks.loop(hours=24)  # Adjust the interval as needed
+# async def send_money_flow_report():
+#     channel = bot.get_channel(MONEY_FLOW_CHANNEL)
+#     if channel:
+#         report_files = await generate_report()
+#         if report_files is not None:
+#             for file_path in report_files:
+#                 if os.path.exists(file_path):
+#                     await channel.send(file=disnake.File(file_path))
+#             cleanup_report_files(report_files)
+#         else:
+#             logger.warning("No report was generated.")
+
+
+# @send_money_flow_report.before_loop
+# async def before_send_money_flow_report():
+#     await bot.wait_until_ready()
+
+
+# send_money_flow_report.start()
 
 
 # Graceful shutdown

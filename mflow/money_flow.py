@@ -21,6 +21,13 @@ async def fetch_overall_market_data(api_key=CG_API_KEY):
     pass
 
 
+def cleanup_report_files(file_paths):
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"Deleted file: {file_path}")
+
+
 async def fetch_coins_by_category(category, api_key=CG_API_KEY):
     coins_data = []
     page = 1
@@ -70,11 +77,13 @@ async def analyze_categories(categories):
     total_volume = sum(
         category["volume_24h"] for category in categories if category["volume_24h"]
     )
+    logger.info(f"Total volume: {total_volume}")
     total_market_cap_change = sum(
         category["market_cap_change_24h"]
         for category in categories
         if category["market_cap_change_24h"]
     )
+    logger.info(f"Total market cap change: {total_market_cap_change}")
 
     money_flow_analysis = {}
     for category in categories:
@@ -95,6 +104,9 @@ async def analyze_categories(categories):
         ),
         reverse=True,
     )[:5]
+    # log top categories names
+    logger.info(f"Top categories: {[category['name'] for category in top_categories]}")
+    # TODO: use the total volume, total market cap change as well to provide insights.
     return money_flow_analysis, top_categories
 
 
@@ -152,15 +164,24 @@ def plot_money_flow(money_flow_analysis):
 
 
 async def generate_report():
-    # TODO: Include overall market data in the report
-    # TODO: Enhance report with historical context comparison
+    report_files = []
     categories = await fetch_category_info()
     if categories:
         money_flow_analysis, top_categories = await analyze_categories(categories)
+        # Generate performance plot
+        performance_plot_filename = "top_categories_by_normalized_money_flow.png"
         plot_performance(top_categories, "Top Categories by Normalized Money Flow")
+        report_files.append(performance_plot_filename)
+
+        # Generate money flow plot
+        money_flow_plot_filename = "money_flow.png"
         plot_money_flow(money_flow_analysis)
-        # TODO: Add more sections to the report as per requirements (e.g., volatility analysis, top coins spotlight)
-        # Now you can use the generated images
+        report_files.append(money_flow_plot_filename)
+
+        # TODO: Add more sections to the report as per requirements
+        # If additional plots or text files are generated, append their paths to report_files
+
+    return report_files
 
 
 if __name__ == "__main__":
