@@ -3,6 +3,7 @@
 import asyncio
 import io
 import os
+from typing import Dict, List, Optional
 
 import aiohttp
 import disnake
@@ -81,7 +82,21 @@ async def generate_bar_chart(coins, category):
     return image_path
 
 
-def create_category_embed(category, coins_data, sparkline_image_path=None):
+def format_currency(value: float) -> str:
+    """Format a float as a currency string, converting to a more readable format."""
+    if value >= 1_000_000_000:
+        return f"${value / 1_000_000_000:.1f}B"
+    elif value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M"
+    elif value >= 1_000:
+        return f"${value / 1_000:.1f}K"
+    else:
+        return f"${value:.2f}"
+
+
+def create_category_embed(
+    category: str, coins_data: List[Dict], sparkline_image_path: Optional[str] = None
+) -> disnake.Embed:
     # Sort coins by market cap to find the top 3
     top_coins_by_market_cap = sorted(
         coins_data, key=lambda x: x.get("market_cap", 0), reverse=True
@@ -93,28 +108,30 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
         for coin in coins_data
         if coin.get("price_change_percentage_24h") is not None
     ]
-    if valid_24h_changes:
-        highest_24h_increase = max(
-            valid_24h_changes, key=lambda x: x["price_change_percentage_24h"]
-        )
-        min_24h_change = min(
-            valid_24h_changes, key=lambda x: x["price_change_percentage_24h"]
-        )
-    else:
-        highest_24h_increase = None
-        min_24h_change = None
+    highest_24h_increase = max(
+        valid_24h_changes, key=lambda x: x["price_change_percentage_24h"], default=None
+    )
+    min_24h_change = min(
+        valid_24h_changes, key=lambda x: x["price_change_percentage_24h"], default=None
+    )
 
     embed = disnake.Embed(
-        title=f"{category.capitalize()} - Category Stats:",
-        description=f"Top coins in the {category} category based on market cap and price changes.",
+        title=f"{category.capitalize()} - Category Stats",
+        description=f"",  # Empty on purpose
         color=disnake.Color.blue(),
     )
 
     # Add fields for top coins by market cap
     for i, coin in enumerate(top_coins_by_market_cap, 1):
+        price_change = coin.get("price_change_percentage_24h", "N/A")
+        price_change_str = f"{price_change:.2f}%" if price_change != "N/A" else "N/A"
         embed.add_field(
             name=f"Top {i}: {coin['name']} ({coin['symbol'].upper()})",
-            value=f"Market Cap: ${coin['market_cap']}\nCurrent Price: ${coin['current_price']:.6f}\n24h Change: {coin.get('price_change_percentage_24h', 'N/A')}",
+            value=(
+                f"Market Cap: {format_currency(coin['market_cap'])}\n"
+                f"Current Price: ${format_number(coin['current_price'])}\n"
+                f"24h Change: {price_change_str}"
+            ),
             inline=False,
         )
 
@@ -122,7 +139,10 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
     if highest_24h_increase:
         embed.add_field(
             name=f"Highest 24h Increase: {highest_24h_increase['name']} ({highest_24h_increase['symbol'].upper()})",
-            value=f"Current Price: ${highest_24h_increase['current_price']:.6f}\n24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%",
+            value=(
+                f"Current Price: ${format_number(highest_24h_increase['current_price'])}\n"
+                f"24h Change: {highest_24h_increase['price_change_percentage_24h']:.2f}%"
+            ),
             inline=False,
         )
 
@@ -130,7 +150,10 @@ def create_category_embed(category, coins_data, sparkline_image_path=None):
     if min_24h_change:
         embed.add_field(
             name=f"Lowest 24h Change: {min_24h_change['name']} ({min_24h_change['symbol'].upper()})",
-            value=f"Current Price: ${min_24h_change['current_price']:.6f}\n24h Change: {min_24h_change['price_change_percentage_24h']:.2f}%",
+            value=(
+                f"Current Price: ${format_number(min_24h_change['current_price'])}\n"
+                f"24h Change: {min_24h_change['price_change_percentage_24h']:.2f}%"
+            ),
             inline=False,
         )
 
