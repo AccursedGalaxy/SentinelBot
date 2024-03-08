@@ -11,7 +11,7 @@ from data.db import Database
 from data.models import Guild, User
 from logger_config import setup_logging
 
-logger = setup_logging()
+logger = setup_logging("Sentinel", "green")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
