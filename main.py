@@ -133,7 +133,7 @@ async def get_alerts_channel():
         Database.close_session()
 
 
-@tasks.loop(hours=24)  # Adjust the interval as needed
+@tasks.loop(hours=1)  # Adjust the interval as needed
 async def send_money_flow_report():
     channel = bot.get_channel(MONEY_FLOW_CHANNEL)
     if channel:
