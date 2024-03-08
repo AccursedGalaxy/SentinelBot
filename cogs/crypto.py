@@ -137,7 +137,7 @@ def create_category_embed(
 ) -> disnake.Embed:
     embed = disnake.Embed(
         title=f"{category.capitalize()} - Category Stats",
-        description=f"Overview of the {category} category",
+        description=f"Top gainers of the {category} category, index parkline and market cap distribution.",
         color=disnake.Color.blue(),
     )
 
