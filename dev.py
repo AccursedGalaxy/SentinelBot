@@ -15,6 +15,10 @@ watcher_logger = setup_logging("watcher", "blue")
 class MyHandler(PatternMatchingEventHandler):
     patterns = ["*.py"]
 
+    def __init__(self):
+        super().__init__()
+        self.restart_script()  # Start main.py when the handler is initialized
+
     def process(self, event):
         watcher_logger.info(f"Event type: {event.event_type}  path: {event.src_path}")
         self.restart_script()

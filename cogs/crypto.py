@@ -270,7 +270,7 @@ class CryptoCommands(commands.Cog):
         if trending_coins:
             embed = disnake.Embed(
                 title="Top 5 Trending Cryptocurrencies",
-                description="Here are the top 5 trending cryptocurrencies on CoinGecko:",
+                description="",
                 color=disnake.Color.blue(),
             )
 
@@ -280,25 +280,30 @@ class CryptoCommands(commands.Cog):
             # Iterate over the top 5 trending coins to build the details string
             for coin in trending_coins[:5]:
                 coin_details = coin.get("item", {})
-                coin_details_str += f"**{coin_details.get('name', 'N/A')} ({coin_details.get('symbol', 'N/A').upper()})**\n"
-                coin_details_str += (
-                    f"Market Cap Rank: {coin_details.get('market_cap_rank', 'N/A')}\n"
+                coin_name = coin_details.get("name", "N/A")
+                coin_symbol = coin_details.get("symbol", "N/A").upper()
+                market_cap_rank = coin_details.get("market_cap_rank", "N/A")
+                price = coin_details.get("data", {}).get("price", "N/A")
+                change_24h = (
+                    coin_details.get("data", {})
+                    .get("price_change_percentage_24h", {})
+                    .get("usd", "N/A")
                 )
-                coin_details_str += (
-                    f"Price: {coin_details.get('data', {}).get('price', 'N/A')}\n"
-                )
-                coin_details_str += f"24h Change: {coin_details.get('data', {}).get('price_change_percentage_24h', {}).get('usd', 'N/A')}%\n\n"
+
+                # Format numbers and percentages
+                if isinstance(price, (int, float)):
+                    price = f"${price:,.2f}"
+                if isinstance(change_24h, (int, float)):
+                    change_24h = f"{change_24h:.2f}%"
+
+                coin_details_str += f"**{coin_name} ({coin_symbol})**\n"
+                coin_details_str += f"Market Cap Rank: {market_cap_rank}\n"
+                coin_details_str += f"Price: {price}\n"
+                coin_details_str += f"24h Change: {change_24h}\n\n"
 
             # Add the consolidated coin details to the embed
             embed.add_field(name="", value=coin_details_str, inline=False)
 
-            # Generate a composite image of sparkline graphs for the top 5 trending coins
-            # This function should return the path to the generated image
-            # composite_sparkline_image_path = await generate_composite_sparkline_image(
-            #     trending_coins[:5]
-            # )
-
-            # Send the embed along with the composite sparkline image
             await inter.followup.send(embed=embed)
 
         else:
