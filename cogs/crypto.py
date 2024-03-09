@@ -248,22 +248,22 @@ class CryptoCommands(commands.Cog):
         )
         embed.add_field(
             name="24h Change",
-            value=f"{format_number(market_data.get('price_change_24h_in_currency', {}).get('usd', 0))}%",
+            value=f"{market_data.get('price_change_24h_in_currency', {}).get('usd', 0):.2f}%",
             inline=True,
         )
         embed.add_field(
             name="7d Change",
-            value=f"{format_number(market_data.get('price_change_percentage_7d_in_currency', {}).get('usd', 0))}%",
+            value=f"{market_data.get('price_change_percentage_7d_in_currency', {}).get('usd', 0):.2f}%",
             inline=True,
         )
         embed.add_field(
             name="14d Change",
-            value=f"{format_number(market_data.get('price_change_percentage_14d_in_currency', {}).get('usd', 0))}%",
+            value=f"{market_data.get('price_change_percentage_14d_in_currency', {}).get('usd', 0):.2f}%",
             inline=True,
         )
         embed.add_field(
             name="30d Change",
-            value=f"{format_number(market_data.get('price_change_percentage_30d_in_currency', {}).get('usd', 0))}%",
+            value=f"{market_data.get('price_change_percentage_30d_in_currency', {}).get('usd', 0):.2f}%",
             inline=True,
         )
 
