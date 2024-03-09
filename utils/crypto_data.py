@@ -41,6 +41,41 @@ async def get_markets(exchange):
         return None
 
 
+async def fetch_coin_info(coin_id, api_key=CG_API_KEY):
+    """
+    Fetches important and valuable information for a specified coin asynchronously.
+
+    Args:
+    coin_id (str): The ID of the coin to fetch data for.
+    api_key (str): The API key for authenticating the request.
+
+    Returns:
+    dict: A dictionary containing the fetched coin data.
+    """
+    url = f"https://pro-api.coingecko.com/api/v3/coins/{coin_id}"
+    params = {
+        "localization": "false",
+        "tickers": "false",
+        "market_data": "true",
+        "community_data": "false",
+        "developer_data": "false",
+        "sparkline": "true",
+    }
+    headers = {
+        "x-cg-pro-api-key": api_key,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data  # Return the full data for the coin
+            else:
+                return {
+                    "error": f"Failed to fetch data, status code: {response.status}"
+                }
+
+
 async def fetch_current_price(symbol):
     """Get current price from an exchange object."""
     try:
