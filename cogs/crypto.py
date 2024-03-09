@@ -1,5 +1,3 @@
-# TODO:
-
 import asyncio
 import io
 import os
@@ -10,15 +8,16 @@ import disnake
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+import plotly.io as pio
 from disnake.ext import commands
 from PIL import Image
 
 from config.settings import CATEGORIES, CG_API_KEY
 from logger_config import setup_logging
 from utils.cache import cache_response
-from utils.crypto_data import (fetch_coins_by_category, fetch_current_price,
-                               fetch_top_gainers_losers, fetch_trending_coins,
-                               validate_ticker)
+from utils.crypto_data import (fetch_coin_info, fetch_coins_by_category,
+                               fetch_current_price, fetch_top_gainers_losers,
+                               fetch_trending_coins, validate_ticker)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = setup_logging()
@@ -119,7 +118,9 @@ async def generate_pie_chart(coins_data):
 
 def format_currency(value: float) -> str:
     """Format a float as a currency string, converting to a more readable format."""
-    if value >= 1_000_000_000:
+    if value >= 1_000_000_000_000:
+        return f"${value / 1_000_000_000_000:.1f}T"
+    elif value >= 1_000_000_000:
         return f"${value / 1_000_000_000:.1f}B"
     elif value >= 1_000_000:
         return f"${value / 1_000_000:.1f}M"
@@ -186,6 +187,154 @@ class CryptoCommands(commands.Cog):
         await inter.edit_original_response(
             content=f"Current price of {ticker.upper()}: ${price}"
         )
+
+    @commands.slash_command(
+        name="coin",
+        description="Gets stats about a cryptocurrency. - usage: /coin <ticker> - example: /coin btc",
+    )
+    async def coin(self, inter: disnake.ApplicationCommandInteraction, ticker: str):
+        """Gets detailed statistics about a cryptocurrency."""
+        await inter.response.defer()
+
+        # Fetch coin data
+        coin_data = await fetch_coin_info(ticker)
+        if not coin_data or "name" not in coin_data or "symbol" not in coin_data:
+            await inter.followup.send(
+                f"No data available or incomplete data for {ticker.upper()}."
+            )
+            return
+
+        # Create a short description
+        short_description = (
+            coin_data.get("description", {}).get("en", "").split(". ")[0] + "."
+        )
+
+        # Create the embed
+        embed = disnake.Embed(
+            title=f"{coin_data['name']} ({coin_data['symbol'].upper()})",
+            description=short_description,
+            color=disnake.Color.blue(),
+        )
+
+        # Add thumbnail
+        embed.set_thumbnail(url=coin_data.get("image", {}).get("large", ""))
+
+        # Add fields for various statistics
+        market_data = coin_data.get("market_data", {})
+        embed.add_field(
+            name="Current Price",
+            value=f"${format_number(market_data.get('current_price', {}).get('usd', 0))}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Market Cap",
+            value=format_currency(market_data.get("market_cap", {}).get("usd", 0)),
+            inline=True,
+        )
+        embed.add_field(
+            name="24h Volume",
+            value=format_currency(market_data.get("total_volume", {}).get("usd", 0)),
+            inline=True,
+        )
+        embed.add_field(
+            name="24h High",
+            value=f"${format_number(market_data.get('high_24h', {}).get('usd', 0))}",
+            inline=True,
+        )
+        embed.add_field(
+            name="24h Low",
+            value=f"${format_number(market_data.get('low_24h', {}).get('usd', 0))}",
+            inline=True,
+        )
+        embed.add_field(
+            name="24h Change",
+            value=f"{market_data.get('price_change_24h_in_currency', {}).get('usd', 0):.2f}%",
+            inline=True,
+        )
+        embed.add_field(
+            name="7d Change",
+            value=f"{market_data.get('price_change_percentage_7d_in_currency', {}).get('usd', 0):.2f}%",
+            inline=True,
+        )
+        embed.add_field(
+            name="14d Change",
+            value=f"{market_data.get('price_change_percentage_14d_in_currency', {}).get('usd', 0):.2f}%",
+            inline=True,
+        )
+        embed.add_field(
+            name="30d Change",
+            value=f"{market_data.get('price_change_percentage_30d_in_currency', {}).get('usd', 0):.2f}%",
+            inline=True,
+        )
+
+        # Add footer with last updated timestamp
+        embed.set_footer(text=f"Last updated: {coin_data.get('last_updated', 'N/A')}")
+
+        # Generate and attach the 7-day price chart
+        sparkline = coin_data["market_data"]["sparkline_7d"]["price"]
+        if sparkline:
+            # Convert sparkline values to floats
+            sparkline_floats = [
+                float(price) for price in sparkline if price is not None
+            ]
+
+            # Create a Plotly figure
+            fig = go.Figure()
+
+            # Add the sparkline data to the figure with improved styling
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(len(sparkline_floats))),
+                    y=sparkline_floats,
+                    mode="lines",
+                    name="Price",
+                    line=dict(color="#1f77b4", width=2),  # A more appealing color
+                    marker=dict(
+                        color="#ff7f0e",
+                        size=6,
+                        line=dict(width=2, color="DarkSlateGrey"),
+                    ),  # Enhanced markers
+                    fill="tozeroy",
+                    fillcolor="rgba(65, 105, 225, 0.2)",  # More transparent fill
+                )
+            )
+
+            # Calculate min and max for the y-axis, ensuring all values are floats
+            min_price = min(sparkline_floats)
+            max_price = max(sparkline_floats)
+            padding = (
+                max_price - min_price
+            ) * 0.1  # Add 10% padding for better visualization
+
+            # Update the layout of the figure with improved aesthetics
+            fig.update_layout(
+                title=f"{coin_data['name']} 7-Day Price Chart",
+                xaxis_title="Days",
+                yaxis_title="Price in USD",
+                xaxis=dict(showgrid=True, gridwidth=1, gridcolor="LightGrey"),
+                yaxis=dict(
+                    showgrid=True,
+                    gridwidth=1,
+                    gridcolor="LightGrey",
+                    range=[min_price - padding, max_price + padding],
+                ),  # Dynamically adjust y-axis range
+                plot_bgcolor="white",
+                showlegend=False,
+                font=dict(
+                    family="Courier New, monospace", size=18, color="#7f7f7f"
+                ),  # Improved font styling
+            )
+
+            # Save the figure as a static image
+            chart_path = f"{ticker}_7d_chart.png"
+            pio.write_image(fig, chart_path)
+
+            # Send the embed with the chart image
+            await inter.followup.send(embed=embed, file=disnake.File(chart_path))
+            os.remove(chart_path)
+        else:
+            # Send the embed without the chart if sparkline data is not available
+            await inter.followup.send(embed=embed)
 
     @commands.slash_command(name="gainers", description="Shows the top 5 gainers")
     @cache_response(3600)
