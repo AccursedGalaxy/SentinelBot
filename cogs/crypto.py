@@ -432,11 +432,15 @@ class CryptoCommands(commands.Cog):
                 market_cap = coin_details.get("data", {}).get("market_cap", "N/A")
                 total_volume = coin_details.get("data", {}).get("total_volume", "N/A")
 
-                # Format numbers and percentages
+                # Format numbers and percentages using the format_number and format_currency functions
                 if isinstance(price, (int, float)):
-                    price = f"${price:,.2f}"
+                    price = f"${format_number(price)}"
                 if isinstance(change_24h, (int, float)):
-                    change_24h = f"{change_24h:.2f}%"
+                    change_24h = f"{format_number(change_24h)}%"
+                if isinstance(market_cap, (int, float)):
+                    market_cap = format_currency(market_cap)
+                if isinstance(total_volume, (int, float)):
+                    total_volume = format_currency(total_volume)
 
                 coin_details_str += f"**{coin_name} ({coin_symbol})**\n"
                 coin_details_str += f"Price: {price}\n"
