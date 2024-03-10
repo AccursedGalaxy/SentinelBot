@@ -1,6 +1,7 @@
-from sqlalchemy import (BigInteger, Boolean, Column, DateTime, Float, Integer,
-                        String, Text)
+from sqlalchemy import (BigInteger, Boolean, Column, DateTime, Float,
+                        ForeignKey, Integer, String, Text)
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 from logger_config import setup_logging
 
@@ -79,3 +80,16 @@ class CommandsChannel(Base):
                 self.guild_id,
             )
         )
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False)
+    alert_type = Column(String, nullable=False)
+    timestamp = Column(DateTime, nullable=False)
+    last_alerted_at = Column(DateTime, nullable=False)
+
+    def __repr__(self):
+        return f"<Alert(id='{self.id}', symbol='{self.symbol}', alert_type='{self.alert_type}', timestamp='{self.timestamp}', last_alerted_at='{self.last_alerted_at}')>"

@@ -41,17 +41,38 @@ async def get_markets(exchange):
         return None
 
 
-async def fetch_coin_info(coin_id, api_key=CG_API_KEY):
+async def fetch_coin_info(symbol, api_key=CG_API_KEY):
     """
     Fetches important and valuable information for a specified coin asynchronously.
 
     Args:
-    coin_id (str): The ID of the coin to fetch data for.
+    symbol (str): The ticker symbol of the coin to fetch data for.
     api_key (str): The API key for authenticating the request.
 
     Returns:
     dict: A dictionary containing the fetched coin data.
     """
+    # First, fetch the mapping of all coins and their IDs from CoinGecko
+    coins_url = "https://api.coingecko.com/api/v3/coins/list"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(coins_url) as response:
+            if response.status == 200:
+                coins_list = await response.json()
+                # Create a mapping of symbols to coin IDs
+                symbol_to_id = {
+                    coin["symbol"].upper(): coin["id"] for coin in coins_list
+                }
+            else:
+                return {
+                    "error": f"Failed to fetch coins list, status code: {response.status}"
+                }
+
+    # Check if the symbol is in the mapping
+    coin_id = symbol_to_id.get(symbol.upper())
+    if not coin_id:
+        return {"error": f"CoinGecko does not support the symbol: {symbol}"}
+
+    # Now fetch the coin info using the coin ID
     url = f"https://pro-api.coingecko.com/api/v3/coins/{coin_id}"
     params = {
         "localization": "false",
@@ -72,7 +93,7 @@ async def fetch_coin_info(coin_id, api_key=CG_API_KEY):
                 return data  # Return the full data for the coin
             else:
                 return {
-                    "error": f"Failed to fetch data, status code: {response.status}"
+                    "error": f"Failed to fetch data for {coin_id}, status code: {response.status}"
                 }
 
 
