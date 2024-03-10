@@ -58,7 +58,7 @@ async def on_ready():
     await bot.change_presence(
         activity=disnake.Activity(
             type=disnake.ActivityType.watching,
-            name="Sentinel | /sentinel - to get a overview",
+            name="Sentinel | /help for commands",
         )
     )
     logger.info(f"Logged in as {bot.user.name} ({bot.user.id})")
