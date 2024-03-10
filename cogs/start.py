@@ -3,6 +3,8 @@ import asyncio
 import disnake
 from disnake.ext import commands
 
+from config.settings import ANNOUNCEMENT_CHANNEL
+
 
 class IntroView(disnake.ui.View):
     def __init__(self, embeds):
@@ -70,7 +72,7 @@ class StartCommand(commands.Cog):
             disnake.Embed(
                 title="📈 Real-Time Market Data",
                 description=(
-                    "Stay updated with the latest market data and track the performance of various cryptocurrencies in real-time. 📊\n\n"
+                    "Stay updated with the latest market data and track the performance of various cryptocurrencies in real-time.\n\n"
                     "You can do **/price <ticker>** to get the current price of a cryptocurrency, for example **/price BTCUSDT**."
                 ),
                 color=disnake.Color.from_rgb(0, 255, 255),
@@ -82,15 +84,42 @@ class StartCommand(commands.Cog):
             disnake.Embed(
                 title="📊 Detailed Insights",
                 description=(
-                    "Get detailed insights into various cryptocurrencies and their historical performance. 📈\n\n"
+                    "Get detailed insights into various cryptocurrencies and their historical performance.\n\n"
                     "You can do **/coin <name>** to get detailed information about a cryptocurrency, for example **/coin gala**. \n\n"
-                    "Please not that here you have to use the full coin name, not the ticker. (we are working on a way to use the ticker as well)"
+                    "Please note that here you have to use the full coin name, not the ticker. (we are working on a way to use the ticker as well)"
                 ),
                 color=disnake.Color.from_rgb(0, 255, 255),
             )
             .set_image(url="attachment://start.png")
             .set_footer(
                 text="Use the buttons below to navigate through the introduction."
+            ),
+            # embed for /gainers /losers and /trending coins
+            disnake.Embed(
+                title="📈📉 Trending Coins",
+                description=(
+                    "Discover the trending cryptocurrencies and stay updated with the latest trends in the crypto world.\n\n"
+                    "**/gainers** will give you a list of the recent top gainers among the top cryptocurrencies. \n\n"
+                    "**/losers** will give you a list of the recent top losers among the top cryptocurrencies. \n\n"
+                    "**/trending** will give you a list of the trending cryptocurrencies."
+                ),
+                color=disnake.Color.from_rgb(0, 255, 255),
+            )
+            .set_image(url="attachment://start.png")
+            .set_footer(
+                text="Use the buttons below to navigate through the introduction."
+            ),
+            disnake.Embed(
+                title="📊📈 Advanced Features",
+                description=(
+                    "Explore advanced features such as tracking the money flow in the cryptocurrency market and more.\n\n"
+                    "You can do **/category <category>** to get detailed statistics about any category from CoinGecko. \n\n"
+                    "If you want to see the main categories, you can do **/list_categories**. \n\n"
+                    "The **/money_flow** command will give you a report of the money flow between the different categories. - Unfortunatly this feature is still in development. \n"
+                    # comment with link to the announcement channel to get updtaes when new features like the money flow are added
+                    f"Stay tuned for more updates in the <#{ANNOUNCEMENT_CHANNEL}> channel!"
+                ),
+                color=disnake.Color.from_rgb(0, 255, 255),
             ),
         ]
 
