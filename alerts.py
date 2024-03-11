@@ -1,3 +1,4 @@
+# TODO: turn moving averages into easily editable variables
 import asyncio
 import statistics
 from datetime import datetime, timedelta
@@ -20,6 +21,8 @@ RVOL_UP = 1.5
 RVOL_DOWN = 0.3
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
+short_ma_period = 9
+long_ma_period = 21
 
 alerts_channel_id = ALERTS_CHANNEL
 
@@ -51,8 +54,8 @@ class CryptoAnalyzer:
         lows = [candle[3] for candle in candles]
         highs = [candle[2] for candle in candles]
         volumes = [candle[5] for candle in candles]
-        ma_21 = await self.calculate_moving_average(symbol, 21)
-        ma_51 = await self.calculate_moving_average(symbol, 51)
+        ma_short = await self.calculate_moving_average(symbol, short_ma_period)
+        ma_long = await self.calculate_moving_average(symbol, long_ma_period)
 
         # Create a plot with two y-axes
         fig = go.Figure()
@@ -84,7 +87,7 @@ class CryptoAnalyzer:
         fig.add_trace(
             go.Scatter(
                 x=dates,
-                y=[ma_21] * len(dates),
+                y=[ma_short] * len(dates),
                 name="21-day MA",
                 line=dict(color="orange", dash="dash"),
             )
@@ -92,7 +95,7 @@ class CryptoAnalyzer:
         fig.add_trace(
             go.Scatter(
                 x=dates,
-                y=[ma_51] * len(dates),
+                y=[ma_long] * len(dates),
                 name="51-day MA",
                 line=dict(color="green", dash="dot"),
             )
@@ -216,8 +219,25 @@ class CryptoAnalyzer:
         """Generate the alert description text."""
         description = f"Current volume ({current_volume}) is significantly higher than the 30-day average.\n\n"
         description += f"**{coin_data['name']} ({coin_data['symbol'].upper()})**\n"
-        description += f"Current Price: ${format_number(coin_data['market_data']['current_price']['usd'])}\n"
-        description += f"24h Volume: {format_currency(coin_data['market_data']['total_volume']['usd'])}\n"
+
+        # Check if 'usd' key exists in current_price and total_volume
+        current_price = coin_data["market_data"]["current_price"].get(
+            "usd", "Data not available"
+        )
+        total_volume = coin_data["market_data"]["total_volume"].get(
+            "usd", "Data not available"
+        )
+
+        description += (
+            f"Current Price: ${format_number(current_price)}\n"
+            if current_price != "Data not available"
+            else "Current Price: Data not available\n"
+        )
+        description += (
+            f"24h Volume: {format_currency(total_volume)}\n"
+            if total_volume != "Data not available"
+            else "24h Volume: Data not available\n"
+        )
 
         change_24h = coin_data["market_data"][
             "price_change_percentage_24h_in_currency"
