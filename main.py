@@ -23,6 +23,9 @@ intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
 alerts_channel_id = ALERTS_CHANNEL
+exchange = "binance"
+analysis_timeframe = "4h"
+analysis_lookback = 30
 
 
 # Bot events
@@ -57,9 +60,12 @@ async def on_ready():
 
     finally:
         Database.close_session()
+    alerts_channel_id = ALERTS_CHANNEL
     if alerts_channel_id:
-        analyzer = CryptoAnalyzer("binance", "4h", 30, bot, alerts_channel_id)
-        await analyzer.run()
+        analyzer = CryptoAnalyzer(
+            exchange, analysis_timeframe, analysis_lookback, bot, alerts_channel_id
+        )
+        bot.loop.create_task(analyzer.run())
     else:
         logger.error("Alerts channel ID not found.")
 

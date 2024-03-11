@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import time
 
 import aiohttp
@@ -9,6 +11,8 @@ from config.settings import CG_API_KEY, CMC_API_KEY
 from logger_config import setup_logging
 
 logger = setup_logging()
+request_semaphore = asyncio.Semaphore(5)
+COIN_LIST_CACHE_FILE = "coin_list_cache.json"
 
 
 async def get_exchange(exchange_id):
@@ -42,37 +46,29 @@ async def get_markets(exchange):
 
 
 async def fetch_coin_info(symbol, api_key=CG_API_KEY):
-    """
-    Fetches important and valuable information for a specified coin asynchronously.
-
-    Args:
-    symbol (str): The ticker symbol of the coin to fetch data for.
-    api_key (str): The API key for authenticating the request.
-
-    Returns:
-    dict: A dictionary containing the fetched coin data.
-    """
-    # First, fetch the mapping of all coins and their IDs from CoinGecko
-    coins_url = "https://api.coingecko.com/api/v3/coins/list"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(coins_url) as response:
-            if response.status == 200:
+    # Check if the cache file exists and load it
+    if os.path.exists(COIN_LIST_CACHE_FILE):
+        with open(COIN_LIST_CACHE_FILE, "r") as file:
+            coins_list = json.load(file)
+    else:
+        # If the cache file doesn't exist, fetch the data and create the cache
+        coins_url = "https://api.coingecko.com/api/v3/coins/list"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(coins_url) as response:
+                if response.status != 200:
+                    return {
+                        "error": f"Failed to fetch coins list, status code: {response.status}"
+                    }
                 coins_list = await response.json()
-                # Create a mapping of symbols to coin IDs
-                symbol_to_id = {
-                    coin["symbol"].upper(): coin["id"] for coin in coins_list
-                }
-            else:
-                return {
-                    "error": f"Failed to fetch coins list, status code: {response.status}"
-                }
+                with open(COIN_LIST_CACHE_FILE, "w") as file:
+                    json.dump(coins_list, file)
 
-    # Check if the symbol is in the mapping
+    symbol_to_id = {coin["symbol"].upper(): coin["id"] for coin in coins_list}
+
     coin_id = symbol_to_id.get(symbol.upper())
     if not coin_id:
         return {"error": f"CoinGecko does not support the symbol: {symbol}"}
 
-    # Now fetch the coin info using the coin ID
     url = f"https://pro-api.coingecko.com/api/v3/coins/{coin_id}"
     params = {
         "localization": "false",
@@ -82,19 +78,16 @@ async def fetch_coin_info(symbol, api_key=CG_API_KEY):
         "developer_data": "false",
         "sparkline": "true",
     }
-    headers = {
-        "x-cg-pro-api-key": api_key,
-    }
+    headers = {"x-cg-pro-api-key": api_key}
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data  # Return the full data for the coin
-            else:
+            if response.status != 200:
                 return {
                     "error": f"Failed to fetch data for {coin_id}, status code: {response.status}"
                 }
+
+            return await response.json()
 
 
 async def fetch_current_price(symbol):
