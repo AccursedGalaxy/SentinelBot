@@ -88,7 +88,7 @@ class CryptoAnalyzer:
             go.Scatter(
                 x=dates,
                 y=[ma_short] * len(dates),
-                name="21-day MA",
+                name=f"{short_ma_period}-day MA",
                 line=dict(color="orange", dash="dash"),
             )
         )
@@ -96,7 +96,7 @@ class CryptoAnalyzer:
             go.Scatter(
                 x=dates,
                 y=[ma_long] * len(dates),
-                name="51-day MA",
+                name=f"{long_ma_period}-day MA",
                 line=dict(color="green", dash="dot"),
             )
         )
