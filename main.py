@@ -6,11 +6,13 @@ import sys
 import disnake
 from disnake.ext import commands, tasks
 
-from config.settings import TEST_GUILDS, TOKEN
+from alerts import CryptoAnalyzer
+from config.settings import ALERTS_CHANNEL, TEST_GUILDS, TOKEN
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
 from mflow.money_flow import cleanup_report_files, generate_report
+from trending_analysis import analyze_trending_coins
 
 logger = setup_logging("Sentinel", "green")
 
@@ -20,6 +22,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
+alerts_channel_id = ALERTS_CHANNEL
+exchange = "binance"
+analysis_timeframe = "4h"
+analysis_lookback = 30
 
 
 # Bot events
@@ -51,8 +57,17 @@ async def on_ready():
                     session.add(new_user)
 
         session.commit()
+
     finally:
         Database.close_session()
+    alerts_channel_id = ALERTS_CHANNEL
+    if alerts_channel_id:
+        analyzer = CryptoAnalyzer(
+            exchange, analysis_timeframe, analysis_lookback, bot, alerts_channel_id
+        )
+        bot.loop.create_task(analyzer.run())
+    else:
+        logger.error("Alerts channel ID not found.")
 
     # Set the bot's status
     await bot.change_presence(
@@ -131,31 +146,6 @@ async def get_alerts_channel():
             return alerts_channel.channel_id
     finally:
         Database.close_session()
-
-
-# @tasks.loop(hours=1)  # Adjust the interval as needed
-# async def send_money_flow_report():
-#     channel = bot.get_channel(MONEY_FLOW_CHANNEL)
-#     if channel:
-#         # Generate the report files and create the embed
-#         embed, file_objects = await generate_report()
-
-#         # Send the embed and files
-#         if file_objects:
-#             await channel.send(embed=embed, files=file_objects)
-#             cleanup_report_files(
-#                 [f.filename for f in file_objects]
-#             )  # Cleanup based on the actual filenames
-#         else:
-#             logger.warning("No report was generated.")
-
-
-# @send_money_flow_report.before_loop
-# async def before_send_money_flow_report():
-#     await bot.wait_until_ready()
-
-
-# send_money_flow_report.start()
 
 
 # Graceful shutdown

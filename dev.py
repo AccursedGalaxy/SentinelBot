@@ -11,6 +11,8 @@ from logger_config import setup_logging
 
 watcher_logger = setup_logging("watcher", "blue")
 
+dev_file = "main.py"
+
 
 class MyHandler(PatternMatchingEventHandler):
     patterns = ["*.py"]
@@ -24,12 +26,12 @@ class MyHandler(PatternMatchingEventHandler):
         self.restart_script()
 
     def restart_script(self):
-        subprocess.run(["pkill", "-f", "main.py"])
+        subprocess.run(["pkill", "-f", dev_file])
         time.sleep(1)  # Give it a moment to terminate
 
         try:
             process = subprocess.Popen(
-                [sys.executable, "main.py"],
+                [sys.executable, dev_file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
