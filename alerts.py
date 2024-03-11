@@ -23,6 +23,7 @@ RVOL_DOWN = 0.3
 alert_timeout_duration = 60 * 60 * 4
 short_ma_period = 9
 long_ma_period = 21
+sleep_time = 60 * 5  # 5 minutes
 
 alerts_channel_id = ALERTS_CHANNEL
 
@@ -279,7 +280,7 @@ class CryptoAnalyzer:
                 if "/" in symbol:
                     await self.process_symbol(symbol)
             logger.info("Completed one loop for all symbols. Starting over...")
-            await asyncio.sleep(60)
+            await asyncio.sleep(sleep_time)
             iteration += 1
 
         await self.exchange.close()
