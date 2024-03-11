@@ -17,13 +17,13 @@ from utils.crypto_data import fetch_coin_info
 
 logger = setup_logging(name="Alerts Worker", default_color="purple")
 
-RVOL_UP = 1.5
+RVOL_UP = 1.8
 RVOL_DOWN = 0.3
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
 short_ma_period = 9
 long_ma_period = 21
-sleep_time = 60 * 5  # 5 minutes
+sleep_time = 60 * 15  # 15 minutes
 
 alerts_channel_id = ALERTS_CHANNEL
 
@@ -279,7 +279,9 @@ class CryptoAnalyzer:
             for symbol in symbols:
                 if "/" in symbol:
                     await self.process_symbol(symbol)
-            logger.info("Completed one loop for all symbols. Starting over...")
+            logger.info(
+                f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds."
+            )
             await asyncio.sleep(sleep_time)
             iteration += 1
 
