@@ -7,12 +7,11 @@ import disnake
 from disnake.ext import commands, tasks
 
 from alerts import CryptoAnalyzer
-from config.settings import TEST_GUILDS, TOKEN
+from config.settings import (MACD_ALERTS_CHANNEL, MAIN_ALERTS_CHANNEL,
+                             RVOL_ALERTS_CHANNEL, TEST_GUILDS, TOKEN)
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
-from mflow.money_flow import cleanup_report_files, generate_report
-from trending_analysis import analyze_trending_coins
 
 logger = setup_logging("Sentinel", "green")
 
@@ -23,12 +22,16 @@ intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
 exchange = "binance"
-analysis_timeframe = "1d"
-analysis_lookback = 30
+analysis_timeframe = "4h"
+analysis_lookback = 31
 
-main_alerts_channel = 1216467253281689650
-rvol_alerts_channel = 1217108284100837386
-macd_alerts_channel = 1217108284100837386
+ping_main_alerts = "<@&1217104257216679988>"
+ping_rvol_alerts = "<@&1217105162351673455>"
+ping_macd_alerts = "<@&1217105204856488018>"
+
+main_alerts_channel = MAIN_ALERTS_CHANNEL
+rvol_alerts_channel = RVOL_ALERTS_CHANNEL
+macd_alerts_channel = MACD_ALERTS_CHANNEL
 
 alert_channels = {
     "RVOL_UP_EXTREME": rvol_alerts_channel,
@@ -36,6 +39,13 @@ alert_channels = {
     "MACD_CROSSOVER_DOWN": macd_alerts_channel,
     "RVOL_MACD_CROSS_UP": main_alerts_channel,
     "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
+}
+ping_roles = {
+    "RVOL_UP_EXTREME": ping_rvol_alerts,
+    "MACD_CROSSOVER_UP": ping_macd_alerts,
+    "MACD_CROSSOVER_DOWN": ping_macd_alerts,
+    "RVOL_MACD_CROSS_UP": ping_main_alerts,
+    "RVOL_MACD_CROSS_DOWN": ping_main_alerts,
 }
 
 
@@ -72,7 +82,12 @@ async def on_ready():
     finally:
         Database.close_session()
         analyzer = CryptoAnalyzer(
-            exchange, analysis_timeframe, analysis_lookback, bot, alert_channels
+            exchange,
+            analysis_timeframe,
+            analysis_lookback,
+            bot,
+            alert_channels,
+            ping_roles,
         )
         bot.loop.create_task(analyzer.run())
 

@@ -1,7 +1,6 @@
 # TODO:
-# -> Think about grouping similar alert types and send them into dedicated channels.
-# --> This would make it easier for users to subscribe to specific alerts.
-# --> Implement Pingroles in Discord and add @ pings to the alert emssages, this way users could enable "discord pings for specific alerts_types.
+# -> Think about grouping similar alert types and send them into dedicated channels. -> Done.
+# --> Implement Pingroles in Discord and add @ pings to the alert emssages, this way users could enable "discord pings for specific alerts_types. -> Done.
 
 # TODO:
 # Alert Throttling:
@@ -51,33 +50,20 @@ ma_short = 9
 ma_long = 21
 sleep_time = 60  # 1 minute
 
-ping_main_alerts = "<@&1217104257216679988>"
-ping_rvol_alerts = "<@&1217105162351673455>"
-ping_macd_alerts = "<@&1217105204856488018>"
-
-main_alerts_channel = 1217102153521565806
-rvol_alerts_channel = 1217101480130121830
-macd_alerts_channel = 1217102356286537831
-
-alert_channels = {
-    "RVOL_UP_EXTREME": rvol_alerts_channel,
-    "MACD_CROSSOVER_UP": macd_alerts_channel,
-    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
-    "RVOL_MACD_CROSS_UP": main_alerts_channel,
-    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
-}
-
 
 class CryptoAnalyzer:
     """Class to analyze cryptocurrency data and send alerts."""
 
-    def __init__(self, exchange_id, timeframe, lookback_days, bot, channel_id):
+    def __init__(
+        self, exchange_id, timeframe, lookback_days, bot, alert_channels, ping_roles
+    ):
         self.exchange_id = exchange_id
         self.timeframe = timeframe
         self.lookback_days = lookback_days
         self.exchange = getattr(ccxt, exchange_id)()
         self.bot = bot
-        self.alert_channel = alert_channels
+        self.alert_channels = alert_channels
+        self.ping_roles = ping_roles
         self.db = Database()
 
     async def calculate_moving_average(self, symbol, period):
@@ -184,21 +170,25 @@ class CryptoAnalyzer:
 
         return image_bytes
 
+    async def get_alert_channel(self, alert_type):
+        """Get the alert channel based on the alert type."""
+        fallback_channel_id = 1217108284100837386
+        channel_id = self.alert_channels.get(
+            alert_type, self.alert_channels.get("default", fallback_channel_id)
+        )
+        return self.bot.get_channel(channel_id)
+
     async def send_discord_alert(
         self, title, description, color, image_bytes=None, alert_type=None
     ):
         # Determine the channel based on the alert type
-        channel_id = self.alert_channels.get(alert_type, self.channel_id)
-        channel = self.bot.get_channel(channel_id)
+        channel = await self.get_alert_channel(alert_type)
 
         if channel:
             try:
                 content = f"**{title}**\n{description}"
                 if alert_type in self.ping_roles:
-                    content = (
-                        f"{self.ping_roles[alert_type]} {content}"  # Add role mention
-                    )
-
+                    content = f"{self.ping_roles[alert_type]} {content}"
                 if image_bytes:
                     disnake_file = disnake.File(image_bytes, filename="chart.png")
                     await channel.send(content=content, file=disnake_file)
@@ -209,7 +199,7 @@ class CryptoAnalyzer:
             except Exception as e:
                 logger.error(f"Failed to send alert: {e}")
         else:
-            logger.error(f"Could not find channel with ID {channel_id}")
+            logger.error(f"Could not find channel with ID {channel}")
 
     async def should_send_alert(self, symbol, alert_type):
         """Check if an alert should be sent for a given symbol and alert type."""
@@ -278,7 +268,7 @@ class CryptoAnalyzer:
             return
 
         # Generate and send the alert with the Chart plot
-        title = f"🔔 RVOL Alert: {symbol} 🔔"
+        title = f"\n🔔 RVOL Alert: {symbol} 🔔"
         description = self.generate_alert_description(coin_data, current_volume)
         filename = await self.plot_ohlcv(symbol, candles)
         await self.send_discord_alert(
@@ -327,7 +317,7 @@ class CryptoAnalyzer:
             current_volume > RVOL_UP_EXTREME * average_volume
             and await self.should_send_alert(symbol, "RVOL_UP_EXTREME")
         ):
-            title = f"🔔 Extreme RVOL Alert: {symbol} 🔔"
+            title = f"\n🔔 Extreme RVOL Alert 🔔"
             description = f"{symbol}: Current volume is **significantly** higher than the average."
             image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_UP_EXTREME")
             await self.send_discord_alert(
@@ -352,7 +342,7 @@ class CryptoAnalyzer:
         if macd_crossover_up and await self.should_send_alert(
             symbol, "MACD_CROSSOVER_UP"
         ):
-            title = f"🔔 MACD Crossover Up Alert: {symbol} 🔔"
+            title = f"\n🔔 MACD Crossover Up Alert 🔔"
             description = (
                 f"{symbol}: MACD line has just crossed **above** the signal line."
             )
@@ -369,7 +359,7 @@ class CryptoAnalyzer:
         if macd_crossover_down and await self.should_send_alert(
             symbol, "MACD_CROSSOVER_DOWN"
         ):
-            title = f"🔔 MACD Crossover Down Alert: {symbol} 🔔"
+            title = f"\n🔔 MACD Crossover Down Alert 🔔"
             description = (
                 f"{symbol}: MACD line has just crossed **below** the signal line."
             )
@@ -397,7 +387,7 @@ class CryptoAnalyzer:
             if macd_crossover_up and await self.should_send_alert(
                 symbol, "RVOL_MACD_CROSS_UP"
             ):
-                title = f"🔔 RVOL Up & MACD Cross Up Alert: {symbol} 🔔"
+                title = f"\n🔔 RVOL Up & MACD Cross Up Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **above** the signal line."
                 image_bytes = await self.plot_ohlcv(
                     symbol, candles, "RVOL_MACD_CROSS_UP"
@@ -414,7 +404,7 @@ class CryptoAnalyzer:
             if macd_crossover_down and await self.should_send_alert(
                 symbol, "RVOL_MACD_CROSS_DOWN"
             ):
-                title = f"🔔 RVOL Up & MACD Cross Down Alert: {symbol} 🔔"
+                title = f"\n🔔 RVOL Up & MACD Cross Down Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **below** the signal line."
                 image_bytes = await self.plot_ohlcv(
                     symbol, candles, "RVOL_MACD_CROSS_DOWN"
