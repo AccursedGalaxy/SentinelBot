@@ -33,6 +33,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from config.settings import FALLBACK_CHANNEL
 from data.db import Database
 from data.models import Alert
 from logger_config import setup_logging
@@ -172,7 +173,7 @@ class CryptoAnalyzer:
 
     async def get_alert_channel(self, alert_type):
         """Get the alert channel based on the alert type."""
-        fallback_channel_id = 1217108284100837386
+        fallback_channel_id = FALLBACK_CHANNEL
         channel_id = self.alert_channels.get(
             alert_type, self.alert_channels.get("default", fallback_channel_id)
         )
