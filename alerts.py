@@ -275,62 +275,53 @@ class CryptoAnalyzer:
 
     async def process_symbol(self, symbol):
         logger.info(f"Processing symbol {symbol}")
-        candles = await self.fetch_candles(symbol)
+        try:
+            candles = await self.fetch_candles(symbol)
+            if candles:
+                await self.analyze_volume(symbol, candles)
 
-        if candles:
-            await self.analyze_volume(symbol, candles)
+                # MACD Alert
+                macd, signal = await self.calculate_macd(symbol)
 
-            # # RSI Alert
-            # rsi = await self.calculate_rsi(symbol)
-            # if (rsi > 70 or rsi < 30) and await self.should_send_alert(symbol):
-            #     title = f"RSI Alert for {symbol}"
-            #     description = (
-            #         f"RSI is {'overbought' if rsi > 70 else 'oversold'} at {rsi}."
-            #     )
-            #     image_bytes = await self.plot_ohlcv(symbol, candles, alert_type="RSI")
-            #     await self.send_discord_alert(
-            #         title, description, disnake.Color.blue(), image_bytes
-            #     )
-            #     await self.update_last_alert_time(symbol)
-
-            # MACD Alert
-            macd, signal = await self.calculate_macd(symbol)
-
-            # Check for the MACD crossover in the last two bars
-            macd_crossover_up = (
-                macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
-            )
-            macd_crossover_down = (
-                macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
-            )
-
-            if (macd_crossover_up) and await self.should_send_alert(
-                symbol, alert_type="MACD"
-            ):
-                direction = "above" if macd_crossover_up else "below"
-                title = f"🔔 MACD Alert for {symbol} 🔔"
-                description = (
-                    f"MACD line has just crossed **{direction}** the signal line."
+                # Check for the MACD crossover in the last two bars
+                macd_crossover_up = (
+                    macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
                 )
-                image_bytes = await self.plot_ohlcv(symbol, candles, alert_type="MACD")
-                await self.send_discord_alert(
-                    title, description, disnake.Color.orange(), image_bytes
+                macd_crossover_down = (
+                    macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
                 )
-                await self.update_last_alert_time(symbol, alert_type="MACD")
+
+                if (macd_crossover_up) and await self.should_send_alert(
+                    symbol, alert_type="MACD"
+                ):
+                    direction = "above" if macd_crossover_up else "below"
+                    title = f"🔔 MACD Alert for {symbol} 🔔"
+                    description = (
+                        f"MACD line has just crossed **{direction}** the signal line."
+                    )
+                    image_bytes = await self.plot_ohlcv(
+                        symbol, candles, alert_type="MACD"
+                    )
+                    await self.send_discord_alert(
+                        title, description, disnake.Color.orange(), image_bytes
+                    )
+                    await self.update_last_alert_time(symbol, alert_type="MACD")
+        except ccxt.ExchangeNotAvailable as e:
+            logger.error(f"Exchange not available when processing {symbol}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error when processing {symbol}: {str(e)}")
 
     async def run(self):
         """Main loop to process all symbols continuously."""
         await self.exchange.load_markets()
-        # Filter out only symbols that end with USDT and remove all symbols that include "UP" or "DOWN" or "BULL" or "BEAR"
         symbols = [
             symbol
             for symbol in self.exchange.symbols
             if "USDT" in symbol
-            and "UP" not in symbol
-            and "DOWN" not in symbol
-            and "BULL" not in symbol
-            and "BEAR" not in symbol
-            and ":USDT" not in symbol
+            and all(
+                keyword not in symbol
+                for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"]
+            )
         ]
 
         while True:
