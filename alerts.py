@@ -34,7 +34,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from config.settings import ALERTS_CHANNEL
 from data.db import Database
 from data.models import Alert
 from logger_config import setup_logging
@@ -51,8 +50,6 @@ alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
 ma_long = 21
 sleep_time = 60  # 1 minute
-
-alerts_channel_id = ALERTS_CHANNEL
 
 ping_main_alerts = "<@&1217104257216679988>"
 ping_rvol_alerts = "<@&1217105162351673455>"

@@ -7,7 +7,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from alerts import CryptoAnalyzer
-from config.settings import ALERTS_CHANNEL, TEST_GUILDS, TOKEN
+from config.settings import TEST_GUILDS, TOKEN
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
@@ -22,9 +22,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
-alerts_channel_id = ALERTS_CHANNEL
 exchange = "binance"
-analysis_timeframe = "4h"
+analysis_timeframe = "1d"
 analysis_lookback = 30
 
 main_alerts_channel = 1216467253281689650
@@ -72,14 +71,10 @@ async def on_ready():
 
     finally:
         Database.close_session()
-    alerts_channel_id = ALERTS_CHANNEL
-    if alerts_channel_id:
         analyzer = CryptoAnalyzer(
             exchange, analysis_timeframe, analysis_lookback, bot, alert_channels
         )
         bot.loop.create_task(analyzer.run())
-    else:
-        logger.error("Alerts channel ID not found.")
 
     # Set the bot's status
     await bot.change_presence(
