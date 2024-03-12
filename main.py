@@ -25,7 +25,7 @@ exchange = "binance"
 analysis_timeframe = "4h"
 analysis_lookback = 31
 
-ping_main_alerts = "<@&1217104257216679988>"
+ping_main_alerts = "<@&1217104257216679987>"
 ping_rvol_alerts = "<@&1217105162351673455>"
 ping_macd_alerts = "<@&1217105204856488018>"
 

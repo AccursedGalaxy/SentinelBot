@@ -1,8 +1,4 @@
 # TODO:
-# -> Think about grouping similar alert types and send them into dedicated channels. -> Done.
-# --> Implement Pingroles in Discord and add @ pings to the alert emssages, this way users could enable "discord pings for specific alerts_types. -> Done.
-
-# TODO:
 # Alert Throttling:
 # - Add a cooldown period for alerts to prevent spamming.
 
