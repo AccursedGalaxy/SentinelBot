@@ -274,77 +274,118 @@ class CryptoAnalyzer:
 
         return description
 
+    async def check_and_alert_rvol_extreme(
+        self, symbol, candles, current_volume, average_volume
+    ):
+        if (
+            current_volume > RVOL_UP_EXTREME * average_volume
+            and await self.should_send_alert(symbol, "RVOL_UP_EXTREME")
+        ):
+            title = f"🔔 Extreme RVOL Alert: {symbol} 🔔"
+            description = f"{symbol}: Current volume is **significantly** higher than the average."
+            image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_UP_EXTREME")
+            await self.send_discord_alert(
+                title, description, disnake.Color.red(), image_bytes
+            )
+            await self.update_last_alert_time(symbol, "RVOL_UP_EXTREME")
+
+    async def check_and_alert_macd_crossover(
+        self, symbol, candles, macd, signal, histogram
+    ):
+        macd_crossover_up = (
+            macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
+        )
+        macd_crossover_down = (
+            macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
+        )
+
+        if macd_crossover_up and await self.should_send_alert(
+            symbol, "MACD_CROSSOVER_UP"
+        ):
+            title = f"🔔 MACD Crossover Up Alert: {symbol} 🔔"
+            description = (
+                f"{symbol}: MACD line has just crossed **above** the signal line."
+            )
+            image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_UP")
+            await self.send_discord_alert(
+                title, description, disnake.Color.green(), image_bytes
+            )
+            await self.update_last_alert_time(symbol, "MACD_CROSSOVER_UP")
+
+        if macd_crossover_down and await self.should_send_alert(
+            symbol, "MACD_CROSSOVER_DOWN"
+        ):
+            title = f"🔔 MACD Crossover Down Alert: {symbol} 🔔"
+            description = (
+                f"{symbol}: MACD line has just crossed **below** the signal line."
+            )
+            image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_DOWN")
+            await self.send_discord_alert(
+                title, description, disnake.Color.orange(), image_bytes
+            )
+            await self.update_last_alert_time(symbol, "MACD_CROSSOVER_DOWN")
+
+    async def check_and_alert_rvol_macd_cross(
+        self, symbol, candles, current_volume, average_volume, macd, signal
+    ):
+        macd_crossover_up = (
+            macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
+        )
+        macd_crossover_down = (
+            macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
+        )
+
+        if current_volume > RVOL_UP * average_volume:
+            if macd_crossover_up and await self.should_send_alert(
+                symbol, "RVOL_MACD_CROSS_UP"
+            ):
+                title = f"🔔 RVOL Up & MACD Cross Up Alert: {symbol} 🔔"
+                description = f"{symbol}: RVOL is up, and MACD line has just crossed **above** the signal line."
+                image_bytes = await self.plot_ohlcv(
+                    symbol, candles, "RVOL_MACD_CROSS_UP"
+                )
+                await self.send_discord_alert(
+                    title, description, disnake.Color.blue(), image_bytes
+                )
+                await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_UP")
+
+            if macd_crossover_down and await self.should_send_alert(
+                symbol, "RVOL_MACD_CROSS_DOWN"
+            ):
+                title = f"🔔 RVOL Up & MACD Cross Down Alert: {symbol} 🔔"
+                description = f"{symbol}: RVOL is up, and MACD line has just crossed **below** the signal line."
+                image_bytes = await self.plot_ohlcv(
+                    symbol, candles, "RVOL_MACD_CROSS_DOWN"
+                )
+                await self.send_discord_alert(
+                    title, description, disnake.Color.purple(), image_bytes
+                )
+                await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_DOWN")
+
     async def process_symbol(self, symbol):
         logger.info(f"Processing symbol {symbol}")
         try:
             candles = await self.fetch_candles(symbol)
             if candles:
-                # Calculate MACD and histogram
+                # Calculate MACD and histogram once
                 macd, signal = await self.calculate_macd(symbol)
                 histogram = macd - signal
 
-                # Check for MACD crossovers
-                macd_crossover_up = (
-                    macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
-                )
-                macd_crossover_down = (
-                    macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
-                )
-
-                # RVOL_UP_EXTREME Alerts. compare entire dataset volumes
+                # Calculate volume metrics once
                 volumes = [candle[5] for candle in candles]
                 average_volume = statistics.mean(volumes)
                 current_volume = candles[-1][5]
 
-                if (
-                    current_volume > RVOL_UP_EXTREME * average_volume
-                    and await self.should_send_alert(symbol, "RVOL_UP_EXTREME")
-                ):
-                    title = "🔔 RVOL Alert: 🔔"
-                    description = f"{symbol}: Current volume is **significantly** higher than the 30-bar average."
-                    image_bytes = await self.plot_ohlcv(
-                        symbol, candles, "RVOL_UP_EXTREME"
-                    )
-                    await self.send_discord_alert(
-                        title, description, disnake.Color.red(), image_bytes
-                    )
-                    await self.update_last_alert_time(symbol, "RVOL_UP_EXTREME")
-
-                # MACD Histogram Negative and MACD crossed above
-                if (
-                    histogram.iloc[-1] <= 0
-                    and macd_crossover_up
-                    and await self.should_send_alert(symbol, "MACD_HIST_NEG_CROSS_UP")
-                ):
-                    title = "🔔 MACD Crossed **Above** 🔔"
-                    description = f"{symbol}: MACD histogram is negative and MACD line has just crossed above the signal line."
-                    image_bytes = await self.plot_ohlcv(
-                        symbol, candles, "MACD_HIST_NEG_CROSS_UP"
-                    )
-                    await self.send_discord_alert(
-                        title, description, disnake.Color.orange(), image_bytes
-                    )
-                    await self.update_last_alert_time(symbol, "MACD_HIST_NEG_CROSS_UP")
-
-                # RVOL_UP and MACD crossed above or below
-                volumes = [candle[5] for candle in candles]
-                average_volume = statistics.mean(volumes)
-                current_volume = candles[-1][5]
-                if (
-                    current_volume > RVOL_UP * average_volume
-                    and (macd_crossover_up or macd_crossover_down)
-                    and await self.should_send_alert(symbol, "RVOL_MACD_CROSS")
-                ):
-                    direction = "above" if macd_crossover_up else "below"
-                    title = f"🔔 RVOL Up and MACD Crossed {direction} 🔔"
-                    description = f"{symbol}: RVOL is up, and MACD line has just crossed {direction} the signal line."
-                    image_bytes = await self.plot_ohlcv(
-                        symbol, candles, "RVOL_MACD_CROSS"
-                    )
-                    await self.send_discord_alert(
-                        title, description, disnake.Color.green(), image_bytes
-                    )
-                    await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS")
+                # Check for various conditions and send alerts
+                await self.check_and_alert_rvol_extreme(
+                    symbol, candles, current_volume, average_volume
+                )
+                await self.check_and_alert_macd_crossover(
+                    symbol, candles, macd, signal, histogram
+                )
+                await self.check_and_alert_rvol_macd_cross(
+                    symbol, candles, current_volume, average_volume, macd, signal
+                )
 
         except ccxt.ExchangeNotAvailable as e:
             logger.error(f"Exchange not available when processing {symbol}: {str(e)}")
