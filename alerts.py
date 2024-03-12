@@ -333,10 +333,7 @@ class CryptoAnalyzer:
             and ":USDT" not in symbol
         ]
 
-        max_iterations = 10  # Set your desired number of iterations
-        iteration = 0
-
-        while iteration < max_iterations:
+        while True:
             for symbol in symbols:
                 if "/" in symbol:
                     await self.process_symbol(symbol)
@@ -344,6 +341,3 @@ class CryptoAnalyzer:
                 f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds."
             )
             await asyncio.sleep(sleep_time)
-            iteration += 1
-
-        await self.exchange.close()
