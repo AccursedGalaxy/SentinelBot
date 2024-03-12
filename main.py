@@ -27,6 +27,18 @@ exchange = "binance"
 analysis_timeframe = "4h"
 analysis_lookback = 30
 
+main_alerts_channel = 1216467253281689650
+rvol_alerts_channel = 1217108284100837386
+macd_alerts_channel = 1217108284100837386
+
+alert_channels = {
+    "RVOL_UP_EXTREME": rvol_alerts_channel,
+    "MACD_CROSSOVER_UP": macd_alerts_channel,
+    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
+    "RVOL_MACD_CROSS_UP": main_alerts_channel,
+    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
+}
+
 
 # Bot events
 @bot.event
@@ -63,7 +75,7 @@ async def on_ready():
     alerts_channel_id = ALERTS_CHANNEL
     if alerts_channel_id:
         analyzer = CryptoAnalyzer(
-            exchange, analysis_timeframe, analysis_lookback, bot, alerts_channel_id
+            exchange, analysis_timeframe, analysis_lookback, bot, alert_channels
         )
         bot.loop.create_task(analyzer.run())
     else:

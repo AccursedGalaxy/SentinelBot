@@ -1,3 +1,28 @@
+# TODO:
+# -> Think about grouping similar alert types and send them into dedicated channels.
+# --> This would make it easier for users to subscribe to specific alerts.
+# --> Implement Pingroles in Discord and add @ pings to the alert emssages, this way users could enable "discord pings for specific alerts_types.
+
+# TODO:
+# Alert Throttling:
+# - Add a cooldown period for alerts to prevent spamming.
+
+# INFO: Alert Ideas
+# - Add more alert types
+# -> Ideas for Alerts:
+# -> - fetch daily candles and check for bullish engulfing, bearish engulfing, etc.
+# -> - Alerts for VWAP setups. (RVOL_UP near VWAP, etc.)
+# -> - Alerts for RSI divergence. Price making higher highs, RSI making lower highs and reverse.
+# -> - Volume and Price Spike Alerts.
+# -> - Whale Transactions Alerts.
+
+# INFO: Current Alert Types:
+# - RVOL_UP_EXTREME: Volume is significantly higher than the average
+# - MACD_CROSSOVER_UP: MACD line has crossed above the signal line
+# - MACD_CROSSOVER_DOWN: MACD line has crossed below the signal line
+# - RVOL_MACD_CROSS_UP: RVOL is up, and MACD line has crossed above the signal line
+# - RVOL_MACD_CROSS_DOWN: RVOL is up, and MACD line has crossed below the signal line
+
 import asyncio
 import statistics
 from datetime import datetime, timedelta
@@ -29,6 +54,22 @@ sleep_time = 60  # 1 minute
 
 alerts_channel_id = ALERTS_CHANNEL
 
+ping_main_alerts = "<@&1217104257216679988>"
+ping_rvol_alerts = "<@&1217105162351673455>"
+ping_macd_alerts = "<@&1217105204856488018>"
+
+main_alerts_channel = 1217102153521565806
+rvol_alerts_channel = 1217101480130121830
+macd_alerts_channel = 1217102356286537831
+
+alert_channels = {
+    "RVOL_UP_EXTREME": rvol_alerts_channel,
+    "MACD_CROSSOVER_UP": macd_alerts_channel,
+    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
+    "RVOL_MACD_CROSS_UP": main_alerts_channel,
+    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
+}
+
 
 class CryptoAnalyzer:
     """Class to analyze cryptocurrency data and send alerts."""
@@ -39,7 +80,7 @@ class CryptoAnalyzer:
         self.lookback_days = lookback_days
         self.exchange = getattr(ccxt, exchange_id)()
         self.bot = bot
-        self.channel_id = channel_id
+        self.alert_channel = alert_channels
         self.db = Database()
 
     async def calculate_moving_average(self, symbol, period):
@@ -146,24 +187,32 @@ class CryptoAnalyzer:
 
         return image_bytes
 
-    async def send_discord_alert(self, title, description, color, image_bytes=None):
-        channel = self.bot.get_channel(self.channel_id)
+    async def send_discord_alert(
+        self, title, description, color, image_bytes=None, alert_type=None
+    ):
+        # Determine the channel based on the alert type
+        channel_id = self.alert_channels.get(alert_type, self.channel_id)
+        channel = self.bot.get_channel(channel_id)
+
         if channel:
             try:
+                content = f"**{title}**\n{description}"
+                if alert_type in self.ping_roles:
+                    content = (
+                        f"{self.ping_roles[alert_type]} {content}"  # Add role mention
+                    )
+
                 if image_bytes:
                     disnake_file = disnake.File(image_bytes, filename="chart.png")
-                    await channel.send(
-                        content=f"**{title}**\n{description}", file=disnake_file
-                    )
+                    await channel.send(content=content, file=disnake_file)
                 else:
-                    message = f"**{title}**\n{description}"
-                    await channel.send(message)
+                    await channel.send(content=content)
             except disnake.HTTPException as http_exc:
                 logger.error(f"HTTPException while sending alert: {http_exc}")
             except Exception as e:
                 logger.error(f"Failed to send alert: {e}")
         else:
-            logger.error(f"Could not find channel with ID {self.channel_id}")
+            logger.error(f"Could not find channel with ID {channel_id}")
 
     async def should_send_alert(self, symbol, alert_type):
         """Check if an alert should be sent for a given symbol and alert type."""
@@ -285,7 +334,11 @@ class CryptoAnalyzer:
             description = f"{symbol}: Current volume is **significantly** higher than the average."
             image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_UP_EXTREME")
             await self.send_discord_alert(
-                title, description, disnake.Color.red(), image_bytes
+                title,
+                description,
+                disnake.Color.red(),
+                image_bytes,
+                alert_type="RVOL_UP_EXTREME",
             )
             await self.update_last_alert_time(symbol, "RVOL_UP_EXTREME")
 
@@ -308,7 +361,11 @@ class CryptoAnalyzer:
             )
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_UP")
             await self.send_discord_alert(
-                title, description, disnake.Color.green(), image_bytes
+                title,
+                description,
+                disnake.Color.green(),
+                image_bytes,
+                alert_type="MACD_CROSSOVER_UP",
             )
             await self.update_last_alert_time(symbol, "MACD_CROSSOVER_UP")
 
@@ -321,7 +378,11 @@ class CryptoAnalyzer:
             )
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_DOWN")
             await self.send_discord_alert(
-                title, description, disnake.Color.orange(), image_bytes
+                title,
+                description,
+                disnake.Color.orange(),
+                image_bytes,
+                alert_type="MACD_CROSSOVER_DOWN",
             )
             await self.update_last_alert_time(symbol, "MACD_CROSSOVER_DOWN")
 
@@ -345,7 +406,11 @@ class CryptoAnalyzer:
                     symbol, candles, "RVOL_MACD_CROSS_UP"
                 )
                 await self.send_discord_alert(
-                    title, description, disnake.Color.blue(), image_bytes
+                    title,
+                    description,
+                    disnake.Color.blue(),
+                    image_bytes,
+                    alert_type="RVOL_MACD_CROSS_UP",
                 )
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_UP")
 
@@ -358,7 +423,11 @@ class CryptoAnalyzer:
                     symbol, candles, "RVOL_MACD_CROSS_DOWN"
                 )
                 await self.send_discord_alert(
-                    title, description, disnake.Color.purple(), image_bytes
+                    title,
+                    description,
+                    disnake.Color.purple(),
+                    image_bytes,
+                    alert_type="RVOL_MACD_CROSS_DOWN",
                 )
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_DOWN")
 
