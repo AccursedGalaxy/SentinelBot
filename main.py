@@ -7,12 +7,11 @@ import disnake
 from disnake.ext import commands, tasks
 
 from alerts import CryptoAnalyzer
-from config.settings import ALERTS_CHANNEL, TEST_GUILDS, TOKEN
+from config.settings import (MACD_ALERTS_CHANNEL, MAIN_ALERTS_CHANNEL,
+                             RVOL_ALERTS_CHANNEL, TEST_GUILDS, TOKEN)
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
-from mflow.money_flow import cleanup_report_files, generate_report
-from trending_analysis import analyze_trending_coins
 
 logger = setup_logging("Sentinel", "green")
 
@@ -22,10 +21,32 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
-alerts_channel_id = ALERTS_CHANNEL
 exchange = "binance"
 analysis_timeframe = "4h"
-analysis_lookback = 30
+analysis_lookback = 31
+
+ping_main_alerts = "<@&1217104257216679988>"
+ping_rvol_alerts = "<@&1217105162351673455>"
+ping_macd_alerts = "<@&1217105204856488018>"
+
+main_alerts_channel = MAIN_ALERTS_CHANNEL
+rvol_alerts_channel = RVOL_ALERTS_CHANNEL
+macd_alerts_channel = MACD_ALERTS_CHANNEL
+
+alert_channels = {
+    "RVOL_UP_EXTREME": rvol_alerts_channel,
+    "MACD_CROSSOVER_UP": macd_alerts_channel,
+    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
+    "RVOL_MACD_CROSS_UP": main_alerts_channel,
+    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
+}
+ping_roles = {
+    "RVOL_UP_EXTREME": ping_rvol_alerts,
+    "MACD_CROSSOVER_UP": ping_macd_alerts,
+    "MACD_CROSSOVER_DOWN": ping_macd_alerts,
+    "RVOL_MACD_CROSS_UP": ping_main_alerts,
+    "RVOL_MACD_CROSS_DOWN": ping_main_alerts,
+}
 
 
 # Bot events
@@ -60,14 +81,15 @@ async def on_ready():
 
     finally:
         Database.close_session()
-    alerts_channel_id = ALERTS_CHANNEL
-    if alerts_channel_id:
         analyzer = CryptoAnalyzer(
-            exchange, analysis_timeframe, analysis_lookback, bot, alerts_channel_id
+            exchange,
+            analysis_timeframe,
+            analysis_lookback,
+            bot,
+            alert_channels,
+            ping_roles,
         )
         bot.loop.create_task(analyzer.run())
-    else:
-        logger.error("Alerts channel ID not found.")
 
     # Set the bot's status
     await bot.change_presence(
