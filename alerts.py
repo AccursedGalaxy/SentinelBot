@@ -1,7 +1,3 @@
-# TODO:
-# Alert Throttling:
-# - Add a cooldown period for alerts to prevent spamming.
-
 # INFO: Alert Ideas
 # - Add more alert types
 # -> Ideas for Alerts:
@@ -25,6 +21,7 @@ from io import BytesIO
 
 import ccxt.async_support as ccxt
 import disnake
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -41,6 +38,8 @@ logger = setup_logging(name="Alerts Worker", default_color="purple")
 RVOL_UP = 1.5
 RVOL_UP_EXTREME = 2.4
 RVOL_DOWN = 0.3
+ABOVE_VWAP = 1.01
+BELOW_VWAP = 0.99
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
@@ -109,12 +108,43 @@ class CryptoAnalyzer:
 
         return macd, signal
 
+    async def calculate_vwap(self, symbol):
+        """Calculate the Volume Weighted Average Price (VWAP) for a given symbol for the entire lookback period."""
+        candles = await self.fetch_candles(symbol)
+        typical_prices = [(candle[2] + candle[3] + candle[4]) / 3 for candle in candles]
+        volumes = [candle[5] for candle in candles]
+
+        cumulative_tpv = [
+            sum(typical_prices[: i + 1]) for i in range(len(typical_prices))
+        ]
+        cumulative_volume = [sum(volumes[: i + 1]) for i in range(len(volumes))]
+
+        vwap = [
+            tpv / vol if vol else 0
+            for tpv, vol in zip(cumulative_tpv, cumulative_volume)
+        ]
+        return vwap[-1]
+
     async def plot_ohlcv(self, symbol, candles, alert_type=None):
         dates = [datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles]
         closes = [candle[4] for candle in candles]
         highs = [candle[2] for candle in candles]
         lows = [candle[3] for candle in candles]
         volumes = [candle[5] for candle in candles]
+
+        # Calculate VWAP for each candle
+        typical_prices = [
+            (high + low + close) / 3 for high, low, close in zip(highs, lows, closes)
+        ]
+        vp = [
+            volume * typical_price
+            for volume, typical_price in zip(volumes, typical_prices)
+        ]
+        cumulative_vp = np.cumsum(vp)
+        cumulative_volume = np.cumsum(volumes)
+        vwaps = [
+            cvp / cv if cv else 0 for cvp, cv in zip(cumulative_vp, cumulative_volume)
+        ]
 
         # Create a subplot figure with 3 rows to include MACD
         fig = make_subplots(
@@ -126,9 +156,12 @@ class CryptoAnalyzer:
             row_width=[0.3, 0.2, 0.5],
         )
 
-        # Main plot with closing prices
+        # Main plot with closing prices and VWAP
         fig.add_trace(
             go.Scatter(x=dates, y=closes, mode="lines", name="Close"), row=1, col=1
+        )
+        fig.add_trace(
+            go.Scatter(x=dates, y=vwaps, mode="lines", name="VWAP"), row=1, col=1
         )
 
         # Volume plot
@@ -137,8 +170,6 @@ class CryptoAnalyzer:
         # Retrieve MACD and signal line
         macd, signal = await self.calculate_macd(symbol)
         histogram = macd - signal
-
-        # Convert dates for MACD plot alignment
         macd_dates = dates[-len(macd) :]
 
         # MACD plot
@@ -415,6 +446,28 @@ class CryptoAnalyzer:
                 )
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_DOWN")
 
+    async def check_and_alert_vwap(self, symbol, candles):
+        """This function will check if price is near VWAP and volume is high."""
+        vwap = await self.calculate_vwap(symbol)
+        current_price = candles[-1][4]
+
+        if (
+            # check if price is within 1% of VWAP and RVOL is up
+            BELOW_VWAP * vwap < current_price < ABOVE_VWAP * vwap
+            and await self.should_send_alert(symbol, "VWAP_ALERT")
+        ):
+            title = f"\n🔔 VWAP Alert 🔔"
+            description = f"{symbol}: Price is above VWAP and volume is significantly higher than the average."
+            image_bytes = await self.plot_ohlcv(symbol, candles, "VWAP_ALERT")
+            await self.send_discord_alert(
+                title,
+                description,
+                disnake.Color.blue(),
+                image_bytes,
+                alert_type="VWAP_ALERT",
+            )
+            await self.update_last_alert_time(symbol, "VWAP_ALERT")
+
     async def process_symbol(self, symbol):
         logger.info(f"Processing symbol {symbol}")
         try:
@@ -439,6 +492,7 @@ class CryptoAnalyzer:
                 await self.check_and_alert_rvol_macd_cross(
                     symbol, candles, current_volume, average_volume, macd, signal
                 )
+                await self.check_and_alert_vwap(symbol, candles)
 
         except ccxt.ExchangeNotAvailable as e:
             logger.error(f"Exchange not available when processing {symbol}: {str(e)}")
