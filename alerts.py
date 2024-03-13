@@ -109,42 +109,39 @@ class CryptoAnalyzer:
         return macd, signal
 
     async def calculate_vwap(self, symbol):
-        """Calculate the Volume Weighted Average Price (VWAP) for a given symbol for the entire lookback period."""
+        """Optimized calculation of the Volume Weighted Average Price (VWAP)."""
+
         candles = await self.fetch_candles(symbol)
-        typical_prices = [(candle[2] + candle[3] + candle[4]) / 3 for candle in candles]
-        volumes = [candle[5] for candle in candles]
 
-        cumulative_tpv = [
-            sum(typical_prices[: i + 1]) for i in range(len(typical_prices))
-        ]
-        cumulative_volume = [sum(volumes[: i + 1]) for i in range(len(volumes))]
+        typical_prices = np.array(
+            [(candle[2] + candle[3] + candle[4]) / 3 for candle in candles]
+        )
 
-        vwap = [
-            tpv / vol if vol else 0
-            for tpv, vol in zip(cumulative_tpv, cumulative_volume)
-        ]
+        volumes = np.array([candle[5] for candle in candles])
+
+        cumulative_tpv = np.cumsum(typical_prices * volumes)
+
+        cumulative_volume = np.cumsum(volumes)
+
+        vwap = cumulative_tpv / cumulative_volume
+
         return vwap[-1]
 
     async def plot_ohlcv(self, symbol, candles, alert_type=None):
-        dates = [datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles]
-        closes = [candle[4] for candle in candles]
-        highs = [candle[2] for candle in candles]
-        lows = [candle[3] for candle in candles]
-        volumes = [candle[5] for candle in candles]
+        """Optimized plotting of OHLCV data."""
+        dates = np.array(
+            [datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles]
+        )
+        closes = np.array([candle[4] for candle in candles])
+        highs = np.array([candle[2] for candle in candles])
+        lows = np.array([candle[3] for candle in candles])
+        volumes = np.array([candle[5] for candle in candles])
 
-        # Calculate VWAP for each candle
-        typical_prices = [
-            (high + low + close) / 3 for high, low, close in zip(highs, lows, closes)
-        ]
-        vp = [
-            volume * typical_price
-            for volume, typical_price in zip(volumes, typical_prices)
-        ]
+        typical_prices = (highs + lows + closes) / 3
+        vp = volumes * typical_prices
         cumulative_vp = np.cumsum(vp)
         cumulative_volume = np.cumsum(volumes)
-        vwaps = [
-            cvp / cv if cv else 0 for cvp, cv in zip(cumulative_vp, cumulative_volume)
-        ]
+        vwaps = cumulative_vp / cumulative_volume
 
         # Create a subplot figure with 3 rows to include MACD
         fig = make_subplots(
