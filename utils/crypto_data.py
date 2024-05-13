@@ -259,7 +259,8 @@ async def fetch_historical_data(coin_id, days=1):
         async with session.get(url, params=params) as response:
             if response.status == 200:
                 data = await response.json()
-                historical_data_cache[cache_key] = data["prices"]  # Cache the data
+                # Cache the data
+                historical_data_cache[cache_key] = data["prices"]
                 return data["prices"]
             elif response.status == 429:
                 logger.error(
@@ -286,7 +287,8 @@ async def fetch_new_coins(api_key=CG_API_KEY):
                 # Convert activation time to a readable format
                 for coin in new_coins:
                     coin["activated_at"] = time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(coin["activated_at"])
+                        "%Y-%m-%d %H:%M:%S", time.localtime(
+                            coin["activated_at"])
                     )
                 return new_coins
             else:
@@ -294,9 +296,6 @@ async def fetch_new_coins(api_key=CG_API_KEY):
                     f"Failed to fetch new coins. Status: {response.status}. Response: {await response.text()}"
                 )
                 return None
-
-
-import aiohttp
 
 
 async def fetch_coin_data(coin_id, api_key=CG_API_KEY):
