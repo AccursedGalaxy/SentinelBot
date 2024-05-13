@@ -31,7 +31,7 @@ from data.db import Database
 from data.models import Alert
 from logger_config import setup_logging
 from utils.calcs import format_currency, format_number
-from utils.crypto_data import fetch_coin_info
+from utils.crypto_data import fetch_coin_info, get_exchange
 
 logger = setup_logging(name="Alerts Worker", default_color="purple")
 
@@ -40,6 +40,9 @@ RVOL_UP_EXTREME = 2.4
 RVOL_DOWN = 0.3
 ABOVE_VWAP = 1.01
 BELOW_VWAP = 0.99
+# Threshold for large market orders in USD
+# $100,000 - 100k USD might change or make it dynamic
+LARGE_ORDER_THRESHOLD = 100000
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
@@ -65,7 +68,7 @@ class CryptoAnalyzer:
     async def calculate_moving_average(self, symbol, period):
         """Calculate the moving average of a given symbol."""
         since = self.exchange.parse8601(
-            str(datetime.utcnow() - timedelta(days=period * 2))
+            str(datetime.now() - timedelta(days=period * 2))
         )
         candles = await self.exchange.fetch_ohlcv(symbol, self.timeframe, since)
         closes = [candle[4] for candle in candles]
@@ -73,7 +76,8 @@ class CryptoAnalyzer:
 
     async def calculate_rsi(self, symbol, period=14):
         candles = await self.fetch_candles(symbol)
-        changes = [candles[i][4] - candles[i - 1][4] for i in range(1, len(candles))]
+        changes = [candles[i][4] - candles[i - 1][4]
+                   for i in range(1, len(candles))]
 
         gains = [max(change, 0) for change in changes]
         losses = [-min(change, 0) for change in changes]
@@ -167,21 +171,24 @@ class CryptoAnalyzer:
         # Retrieve MACD and signal line
         macd, signal = await self.calculate_macd(symbol)
         histogram = macd - signal
-        macd_dates = dates[-len(macd) :]
+        macd_dates = dates[-len(macd):]
 
         # MACD plot
         fig.add_trace(
             go.Scatter(x=macd_dates, y=macd, mode="lines", name="MACD"), row=3, col=1
         )
         fig.add_trace(
-            go.Scatter(x=macd_dates, y=signal, mode="lines", name="Signal Line"),
+            go.Scatter(x=macd_dates, y=signal,
+                       mode="lines", name="Signal Line"),
             row=3,
             col=1,
         )
-        fig.add_trace(go.Bar(x=macd_dates, y=histogram, name="Histogram"), row=3, col=1)
+        fig.add_trace(go.Bar(x=macd_dates, y=histogram,
+                      name="Histogram"), row=3, col=1)
 
         # Update layout
-        fig.update_layout(height=800, width=800, title_text=f"{symbol} Analysis")
+        fig.update_layout(height=800, width=800,
+                          title_text=f"{symbol} Analysis")
         fig.update_xaxes(title_text="Date", row=3, col=1)
         fig.update_yaxes(title_text="Price", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
@@ -215,7 +222,8 @@ class CryptoAnalyzer:
                 if alert_type in self.ping_roles:
                     content = f"{self.ping_roles[alert_type]} {content}"
                 if image_bytes:
-                    disnake_file = disnake.File(image_bytes, filename="chart.png")
+                    disnake_file = disnake.File(
+                        image_bytes, filename="chart.png")
                     await channel.send(content=content, file=disnake_file)
                 else:
                     await channel.send(content=content)
@@ -235,7 +243,7 @@ class CryptoAnalyzer:
         )
         if (
             last_alert
-            and (datetime.utcnow() - last_alert.last_alerted_at).total_seconds()
+            and (datetime.now() - last_alert.last_alerted_at).total_seconds()
             < alert_timeout_duration
         ):
             return False
@@ -249,13 +257,13 @@ class CryptoAnalyzer:
             .first()
         )
         if alert:
-            alert.last_alerted_at = datetime.utcnow()
+            alert.last_alerted_at = datetime.now()
         else:
             alert = Alert(
                 symbol=symbol,
                 alert_type=alert_type,
-                timestamp=datetime.utcnow(),
-                last_alerted_at=datetime.utcnow(),
+                timestamp=datetime.now(),
+                last_alerted_at=datetime.now(),
             )
             self.db.session.add(alert)
         self.db.session.commit()
@@ -263,7 +271,7 @@ class CryptoAnalyzer:
     async def fetch_candles(self, symbol):
         """Fetch Chart data for a given symbol."""
         since = self.exchange.parse8601(
-            str(datetime.utcnow() - timedelta(days=self.lookback_days))
+            str(datetime.now() - timedelta(days=self.lookback_days))
         )
         candles = await self.exchange.fetch_ohlcv(symbol, self.timeframe, since)
         return candles
@@ -275,7 +283,8 @@ class CryptoAnalyzer:
             return
 
         if not await self.should_send_alert(symbol, alert_type="RVOL"):
-            logger.info(f"Alert for {symbol} is within the cooldown period. Skipping.")
+            logger.info(
+                f"Alert for {symbol} is within the cooldown period. Skipping.")
             return
 
         volumes = [candle[5] for candle in candles]
@@ -283,18 +292,21 @@ class CryptoAnalyzer:
         current_volume = candles[-1][5]
 
         if current_volume <= RVOL_UP * average_volume:
-            logger.info(f"Volume for {symbol} is not significantly higher. No alert.")
+            logger.info(
+                f"Volume for {symbol} is not significantly higher. No alert.")
             return
 
         coin_name = symbol.split("/")[0]
         coin_data = await fetch_coin_info(coin_name)
         if "error" in coin_data:
-            logger.error(f"Error fetching data for {coin_name}: {coin_data['error']}")
+            logger.error(
+                f"Error fetching data for {coin_name}: {coin_data['error']}")
             return
 
         # Generate and send the alert with the Chart plot
         title = f"\n🔔 RVOL Alert: {symbol} 🔔"
-        description = self.generate_alert_description(coin_data, current_volume)
+        description = self.generate_alert_description(
+            coin_data, current_volume)
         filename = await self.plot_ohlcv(symbol, candles)
         await self.send_discord_alert(
             title, description, disnake.Color.green(), filename
@@ -465,6 +477,53 @@ class CryptoAnalyzer:
             )
             await self.update_last_alert_time(symbol, "VWAP_ALERT")
 
+    async def fetch_and_alert_large_orders(self, symbol):
+        try:
+            exchange = await get_exchange("binance")
+            if not exchange:
+                raise Exception("Failed to initialize exchange")
+
+            orders = await exchange.fetch_trades(symbol)
+            large_orders = [
+                order for order in orders if order['amount'] * order['price'] > LARGE_ORDER_THRESHOLD
+            ]
+            for order in large_orders:
+                if await self.should_send_alert(symbol, "LARGE_ORDER"):
+                    await self.send_large_order_alert(symbol, order)
+                    await self.update_last_alert_time(symbol, "LARGE_ORDER")
+        except Exception as e:
+            logger.error(
+                f"Error processing large market orders for {symbol}: {e}")
+        finally:
+            if exchange:
+                await exchange.close()
+
+    async def send_large_order_alert(self, symbol, order):
+        try:
+            if not isinstance(order, dict) or 'amount' not in order or 'price' not in order:
+                logger.error(f"Invalid order format for {symbol}: {order}")
+                return
+
+            # Extract amount, price, and side safely
+            amount = order['amount']
+            price = order['price']
+            # Normalize and capitalize the side
+            side = order.get('side', 'unknown').capitalize()
+
+            # Format the alert message to include side of the trade
+            message = (
+                f"🚨 Large **{side}** Alert for {symbol} 🚨\n"
+                f"Amount: {amount} {symbol.split('/')[0]}\n"
+                f"Price: ${price:.2f}\n"
+                f"Total: ${amount * price:.2f}\n"
+            )
+
+            channel = await self.get_alert_channel("LARGE_ORDER")
+            if channel:
+                await channel.send(message)
+        except Exception as e:
+            logger.error(f"Failed to send large order alert for {symbol}: {e}")
+
     async def process_symbol(self, symbol):
         logger.info(f"Processing symbol {symbol}")
         try:
@@ -480,21 +539,24 @@ class CryptoAnalyzer:
                 current_volume = candles[-1][5]
 
                 # Check for various conditions and send alerts
-                await self.check_and_alert_rvol_extreme(
-                    symbol, candles, current_volume, average_volume
-                )
-                await self.check_and_alert_macd_crossover(
-                    symbol, candles, macd, signal, histogram
-                )
-                await self.check_and_alert_rvol_macd_cross(
-                    symbol, candles, current_volume, average_volume, macd, signal
-                )
-                await self.check_and_alert_vwap(symbol, candles)
+                # await self.check_and_alert_rvol_extreme(
+                #     symbol, candles, current_volume, average_volume
+                # )
+                # await self.check_and_alert_macd_crossover(
+                #     symbol, candles, macd, signal, histogram
+                # )
+                # await self.check_and_alert_rvol_macd_cross(
+                #     symbol, candles, current_volume, average_volume, macd, signal
+                # )
+                # await self.check_and_alert_vwap(symbol, candles)
+                await self.fetch_and_alert_large_orders(symbol)
 
         except ccxt.ExchangeNotAvailable as e:
-            logger.error(f"Exchange not available when processing {symbol}: {str(e)}")
+            logger.error(
+                f"Exchange not available when processing {symbol}: {str(e)}")
         except Exception as e:
-            logger.error(f"Unexpected error when processing {symbol}: {str(e)}")
+            logger.error(
+                f"Unexpected error when processing {symbol}: {str(e)}")
 
     async def run(self):
         """Main loop to process all symbols continuously."""
@@ -502,8 +564,7 @@ class CryptoAnalyzer:
         symbols = [
             symbol
             for symbol in self.exchange.symbols
-            if "USDT" in symbol
-            and all(
+            if symbol.endswith("/USDT") and all(
                 keyword not in symbol
                 for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"]
             )
