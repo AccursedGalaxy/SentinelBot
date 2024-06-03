@@ -1,19 +1,3 @@
-# INFO: Alert Ideas
-# - Add more alert types
-# -> Ideas for Alerts:
-# -> - fetch daily candles and check for bullish engulfing, bearish engulfing, etc.
-# -> - Alerts for VWAP setups. (RVOL_UP near VWAP, etc.)
-# -> - Alerts for RSI divergence. Price making higher highs, RSI making lower highs and reverse.
-# -> - Volume and Price Spike Alerts.
-# -> - Whale Transactions Alerts.
-
-# INFO: Current Alert Types:
-# - RVOL_UP_EXTREME: Volume is significantly higher than the average
-# - MACD_CROSSOVER_UP: MACD line has crossed above the signal line
-# - MACD_CROSSOVER_DOWN: MACD line has crossed below the signal line
-# - RVOL_MACD_CROSS_UP: RVOL is up, and MACD line has crossed above the signal line
-# - RVOL_MACD_CROSS_DOWN: RVOL is up, and MACD line has crossed below the signal line
-
 import asyncio
 import statistics
 from datetime import datetime, timedelta

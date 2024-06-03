@@ -1,3 +1,8 @@
+# TODO:
+# Create a new bot for the order alerts.
+# -> This will allow for better speed ana management of only orders in real time.
+# -> It will also help in reducing the load on the main bot.
+
 import asyncio
 import os
 import signal
@@ -7,9 +12,9 @@ import disnake
 from disnake.ext import commands, tasks
 
 from alerts import CryptoAnalyzer
-from config.settings import (MACD_ALERTS_CHANNEL, MAIN_ALERTS_CHANNEL,
-                             RVOL_ALERTS_CHANNEL, TEST_GUILDS, TOKEN,
-                             VWAP_ALERTS_CHANNEL, LARGE_ORDERS_ALERTS_CHANNEL)
+from config.settings import (LARGE_ORDERS_ALERTS_CHANNEL, MACD_ALERTS_CHANNEL,
+                             MAIN_ALERTS_CHANNEL, RVOL_ALERTS_CHANNEL,
+                             TEST_GUILDS, TOKEN, VWAP_ALERTS_CHANNEL)
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
@@ -65,8 +70,7 @@ async def on_ready():
     try:
         # add guilds to the database
         for guild in bot.guilds:
-            guild_record = session.query(Guild).filter_by(
-                guild_id=guild.id).first()
+            guild_record = session.query(Guild).filter_by(guild_id=guild.id).first()
             if not guild_record:
                 new_guild = Guild(
                     guild_id=guild.id,
@@ -77,8 +81,7 @@ async def on_ready():
 
             # add members to the database
             for member in guild.members:
-                user_record = session.query(User).filter_by(
-                    user_id=member.id).first()
+                user_record = session.query(User).filter_by(user_id=member.id).first()
                 if not user_record:
                     new_user = User(
                         user_id=member.id,
@@ -138,8 +141,7 @@ async def on_member_join(member):
 async def on_guild_join(guild):
     session = Database.get_session()
     try:
-        guild_record = session.query(Guild).filter_by(
-            guild_id=guild.id).first()
+        guild_record = session.query(Guild).filter_by(guild_id=guild.id).first()
         if not guild_record:
             new_guild = Guild(
                 guild_id=guild.id,
@@ -174,8 +176,7 @@ async def get_alerts_channel():
     session = Database.get_session()
     try:
         alerts_channel = (
-            session.query(AlertsChannel).filter_by(
-                guild_id=TEST_GUILDS).first()
+            session.query(AlertsChannel).filter_by(guild_id=TEST_GUILDS).first()
         )
         if alerts_channel:
             return alerts_channel.channel_id
@@ -198,8 +199,7 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
     for s in signals:
-        loop.add_signal_handler(
-            s, lambda s=s: asyncio.create_task(shutdown(s, loop)))
+        loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(s, loop)))
 
     # Create tables if they don't exist
     Database.create_tables()
