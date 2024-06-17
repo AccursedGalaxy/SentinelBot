@@ -39,7 +39,7 @@ tenacity==8.2.3
 threadpoolctl==3.2.0
 typing_extensions==4.9.0
 tzdata==2023.4
-urllib3==2.0.7
+urllib3==2.2.2
 yarl==1.9.2
 matplotlib==3.8.2
 matplotlib-inline==0.1.6
