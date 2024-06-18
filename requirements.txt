@@ -30,7 +30,7 @@ python-dateutil==2.8.2
 python-dotenv==1.0.0
 pytz==2023.3.post1
 requests==2.32.2
-scikit-learn==1.3.2
+scikit-learn==1.5.0
 scipy==1.11.4
 six==1.16.0
 SQLAlchemy==2.0.25
@@ -39,7 +39,7 @@ tenacity==8.2.3
 threadpoolctl==3.2.0
 typing_extensions==4.9.0
 tzdata==2023.4
-urllib3==2.0.7
+urllib3==2.2.2
 yarl==1.9.2
 matplotlib==3.8.2
 matplotlib-inline==0.1.6
