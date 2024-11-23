@@ -6,6 +6,7 @@ It includes tools for fetching candlestick data, calculating technical indicator
 """
 
 import asyncio
+import os
 import statistics
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -22,6 +23,7 @@ from data.db import Database
 from data.models import Alert
 from logger_config import setup_logging
 from utils.calcs import format_currency, format_number
+from utils.chart import PlotChart
 from utils.crypto_data import fetch_coin_info, get_exchange
 
 logger = setup_logging(name="Alerts Worker", default_color="purple")
@@ -33,7 +35,7 @@ ABOVE_VWAP = 1.01
 BELOW_VWAP = 0.99
 # Threshold for large market orders in USD
 # $100,000 - 100k USD might change or make it dynamic
-LARGE_ORDER_THRESHOLD = 1000000
+LARGE_ORDER_THRESHOLD = 10000
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
@@ -305,7 +307,7 @@ class CryptoAnalyzer:
         if current_volume > RVOL_UP_EXTREME * average_volume and await self.should_send_alert(
             symbol, "RVOL_UP_EXTREME"
         ):
-            title = f"\n🔔 Extreme RVOL Alert 🔔"
+            title = "\n🔔 Extreme RVOL Alert 🔔"
             description = f"{symbol}: Current volume is **significantly** higher than the average."
             image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_UP_EXTREME")
             await self.send_discord_alert(
@@ -323,7 +325,7 @@ class CryptoAnalyzer:
         macd_crossover_down = macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
 
         if macd_crossover_up and await self.should_send_alert(symbol, "MACD_CROSSOVER_UP"):
-            title = f"\n🔔 MACD Crossover Up Alert 🔔"
+            title = "\n🔔 MACD Crossover Up Alert 🔔"
             description = f"{symbol}: MACD line has just crossed **above** the signal line."
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_UP")
             await self.send_discord_alert(
@@ -336,7 +338,7 @@ class CryptoAnalyzer:
             await self.update_last_alert_time(symbol, "MACD_CROSSOVER_UP")
 
         if macd_crossover_down and await self.should_send_alert(symbol, "MACD_CROSSOVER_DOWN"):
-            title = f"\n🔔 MACD Crossover Down Alert 🔔"
+            title = "\n🔔 MACD Crossover Down Alert 🔔"
             description = f"{symbol}: MACD line has just crossed **below** the signal line."
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_DOWN")
             await self.send_discord_alert(
@@ -357,7 +359,7 @@ class CryptoAnalyzer:
 
         if current_volume > RVOL_UP * average_volume:
             if macd_crossover_up and await self.should_send_alert(symbol, "RVOL_MACD_CROSS_UP"):
-                title = f"\n🔔 RVOL Up & MACD Cross Up Alert 🔔"
+                title = "\n🔔 RVOL Up & MACD Cross Up Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **above** the signal line."
                 image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_MACD_CROSS_UP")
                 await self.send_discord_alert(
@@ -370,7 +372,7 @@ class CryptoAnalyzer:
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_UP")
 
             if macd_crossover_down and await self.should_send_alert(symbol, "RVOL_MACD_CROSS_DOWN"):
-                title = f"\n🔔 RVOL Up & MACD Cross Down Alert 🔔"
+                title = "\n🔔 RVOL Up & MACD Cross Down Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **below** the signal line."
                 image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_MACD_CROSS_DOWN")
                 await self.send_discord_alert(
@@ -390,7 +392,7 @@ class CryptoAnalyzer:
         if BELOW_VWAP * vwap < current_price < ABOVE_VWAP * vwap and await self.should_send_alert(
             symbol, "VWAP_ALERT"
         ):
-            title = f"\n🔔 VWAP Alert 🔔"
+            title = "\n🔔 VWAP Alert 🔔"
             description = f"{symbol}: Price is above VWAP and volume is significantly higher than the average."
             image_bytes = await self.plot_ohlcv(symbol, candles, "VWAP_ALERT")
             await self.send_discord_alert(
@@ -425,20 +427,35 @@ class CryptoAnalyzer:
             if exchange:
                 await exchange.close()
 
-    async def send_large_order_alert(self, symbol, order):
-        """Send an alert for a large market order."""
+    async def send_large_order_alert(self, symbol: str, order: dict) -> None:
+        """Send an alert for a large market order with a chart showing the order point.
+
+        Args:
+            symbol: Trading pair symbol (e.g. 'BTC/USDT')
+            order: Dictionary containing order details
+        """
         try:
             if not isinstance(order, dict) or "amount" not in order or "price" not in order:
                 logger.error(f"Invalid order format for {symbol}: {order}")
                 return
 
-            # Extract amount, price, and side safely
-            amount = order["amount"]
-            price = order["price"]
-            # Normalize and capitalize the side
+            # Extract order details
+            amount = float(order["amount"])
+            price = float(order["price"])
+            timestamp = order.get("timestamp", datetime.now().timestamp() * 1000)  # Convert to ms
             side = order.get("side", "unknown").capitalize()
 
-            # Format the alert message to include side of the trade
+            # Generate chart with order indicator
+            timeframe = "15m"  # Use 15m timeframe for better detail around the order
+            chart_file = await self.generate_large_order_chart(
+                symbol=symbol,
+                timeframe=timeframe,
+                order_price=price,
+                order_timestamp=timestamp,
+                order_side=side,
+            )
+
+            # Format alert message
             message = (
                 f"🚨 Large **{side}** Alert for {symbol} 🚨\n"
                 f"Amount: {amount} {symbol.split('/')[0]}\n"
@@ -446,11 +463,132 @@ class CryptoAnalyzer:
                 f"Total: ${amount * price:.2f}\n"
             )
 
+            # Send alert with chart
             channel = await self.get_alert_channel("LARGE_ORDER")
-            if channel:
-                await channel.send(message)
+            if channel and chart_file:
+                with open(chart_file, "rb") as f:
+                    discord_file = disnake.File(f, filename="large_order_chart.png")
+                    await channel.send(content=message, file=discord_file)
+
+                # Clean up the chart file
+                try:
+                    os.remove(chart_file)
+                except Exception as e:
+                    logger.warning(f"Failed to remove temporary chart file: {e}")
+
         except Exception as e:
             logger.error(f"Failed to send large order alert for {symbol}: {e}")
+
+    async def generate_large_order_chart(
+        self,
+        symbol: str,
+        timeframe: str,
+        order_price: float,
+        order_timestamp: float,
+        order_side: str,
+    ) -> str | None:
+        """Generate a chart with the large order indicator.
+
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Chart timeframe
+            order_price: Price at which the order was executed
+            order_timestamp: Timestamp of the order in milliseconds
+            order_side: Side of the order (Buy/Sell)
+
+        Returns:
+            Optional[str]: Path to the generated chart file, or None if generation failed
+        """
+        try:
+            # Fetch OHLCV data
+            ohlcv = await PlotChart.get_ohlcv_data(symbol.split("/")[0], timeframe)
+            if not ohlcv:
+                logger.error(f"Failed to fetch OHLCV data for {symbol}")
+                return None
+
+            # Convert to DataFrame
+            df = pd.DataFrame(ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+            df["Date"] = pd.to_datetime(df["Date"], unit="ms")
+            df.set_index("Date", inplace=True)
+
+            # Calculate EMAs
+            df["20ema"] = df["Close"].rolling(window=20).mean()
+            df["50ema"] = df["Close"].rolling(window=50).mean()
+
+            # Create figure
+            fig = go.Figure()
+
+            # Add candlestick chart
+            fig.add_trace(
+                go.Candlestick(
+                    x=df.index,
+                    open=df["Open"],
+                    high=df["High"],
+                    low=df["Low"],
+                    close=df["Close"],
+                    name="Price",
+                )
+            )
+
+            # Add EMAs
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["20ema"], name="20 EMA", line=dict(color="green", width=1)
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["50ema"], name="50 EMA", line=dict(color="yellow", width=1)
+                )
+            )
+
+            # Add order indicator
+            order_time = datetime.fromtimestamp(order_timestamp / 1000)
+            marker_color = "green" if order_side.lower() == "buy" else "red"
+            marker_symbol = "triangle-up" if order_side.lower() == "buy" else "triangle-down"
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[order_time],
+                    y=[order_price],
+                    mode="markers",
+                    name=f"Large {order_side}",
+                    marker=dict(
+                        symbol=marker_symbol,
+                        size=15,
+                        color=marker_color,
+                        line=dict(width=2, color="white"),
+                    ),
+                )
+            )
+
+            # Update layout
+            fig.update_layout(
+                title=f"{symbol} Large {order_side} Order",
+                xaxis=dict(
+                    type="date",
+                    tickformat="%H:%M %b-%d",
+                    tickmode="auto",
+                    nticks=10,
+                    rangeslider=dict(visible=False),
+                ),
+                yaxis=dict(title="Price (USDT)"),
+                template="plotly_dark",
+                margin=dict(b=40, t=40, r=40, l=40),
+            )
+
+            # Save chart
+            if not os.path.exists("charts"):
+                os.makedirs("charts")
+
+            chart_file = f"charts/large_order_{symbol.replace('/', '_')}_{int(order_timestamp)}.png"
+            fig.write_image(chart_file, scale=1.5, width=1000, height=600)
+
+            return chart_file
+
+        except Exception as e:
+            logger.error(f"Failed to generate chart for large order alert: {e}")
+            return None
 
     async def process_symbol(self, symbol):
         """Process a given symbol and send alerts based on various conditions."""
@@ -472,9 +610,9 @@ class CryptoAnalyzer:
                 await self.fetch_and_alert_large_orders(symbol)
 
         except ccxt.ExchangeNotAvailable as e:
-            logger.error(f"Exchange not available when processing {symbol}: {str(e)}")
+            logger.error(f"Exchange not available when processing {symbol}: {e!s}")
         except Exception as e:
-            logger.error(f"Unexpected error when processing {symbol}: {str(e)}")
+            logger.error(f"Unexpected error when processing {symbol}: {e!s}")
 
     async def run(self):
         """Main loop to process all symbols continuously."""
