@@ -9,12 +9,18 @@ import signal
 import sys
 
 import disnake
-from disnake.ext import commands, tasks
+from disnake.ext import commands
 
 from alerts import CryptoAnalyzer
-from config.settings import (LARGE_ORDERS_ALERTS_CHANNEL, MACD_ALERTS_CHANNEL,
-                             MAIN_ALERTS_CHANNEL, RVOL_ALERTS_CHANNEL,
-                             TEST_GUILDS, TOKEN, VWAP_ALERTS_CHANNEL)
+from config.settings import (
+    LARGE_ORDERS_ALERTS_CHANNEL,
+    MACD_ALERTS_CHANNEL,
+    MAIN_ALERTS_CHANNEL,
+    RVOL_ALERTS_CHANNEL,
+    TEST_GUILDS,
+    TOKEN,
+    VWAP_ALERTS_CHANNEL,
+)
 from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
@@ -44,12 +50,12 @@ vwap_alerts_channel = VWAP_ALERTS_CHANNEL
 large_order_alerts_channel = LARGE_ORDERS_ALERTS_CHANNEL
 
 alert_channels = {
-    "RVOL_UP_EXTREME": rvol_alerts_channel,
+    # "RVOL_UP_EXTREME": rvol_alerts_channel,
     "MACD_CROSSOVER_UP": macd_alerts_channel,
     "MACD_CROSSOVER_DOWN": macd_alerts_channel,
     "RVOL_MACD_CROSS_UP": main_alerts_channel,
     "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
-    "VWAP_ALERT": vwap_alerts_channel,
+    # "VWAP_ALERT": vwap_alerts_channel,
     "LARGE_ORDER": large_order_alerts_channel,
 }
 ping_roles = {

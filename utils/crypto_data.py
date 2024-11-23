@@ -287,8 +287,7 @@ async def fetch_new_coins(api_key=CG_API_KEY):
                 # Convert activation time to a readable format
                 for coin in new_coins:
                     coin["activated_at"] = time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(
-                            coin["activated_at"])
+                        "%Y-%m-%d %H:%M:%S", time.localtime(coin["activated_at"])
                     )
                 return new_coins
             else:

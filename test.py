@@ -8,6 +8,7 @@ import disnake
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from disnake.ext import commands, tasks
+from trending_analysis import analyze_trending_coins
 
 from alerts import CryptoAnalyzer
 from config.settings import TEST_GUILDS, TOKEN
@@ -15,7 +16,6 @@ from data.db import Database
 from data.models import AlertsChannel, Guild, User
 from logger_config import setup_logging
 from mflow.money_flow import cleanup_report_files, generate_report
-from trending_analysis import analyze_trending_coins
 
 logger = setup_logging("Sentinel", "green")
 

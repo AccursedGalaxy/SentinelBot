@@ -24,4 +24,3 @@ Sentinel is a powerful Discord bot designed for cryptocurrency traders. It provi
 ### Monitoring and Maintenance
 - Implements monitoring tools like Prometheus or Grafana to track bot performance and health.
 - Regular audits and updates ensure the bot remains efficient, secure, and aligned with user needs.
-

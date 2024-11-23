@@ -15,9 +15,14 @@ from PIL import Image
 from config.settings import CATEGORIES, CG_API_KEY
 from logger_config import setup_logging
 from utils.cache import cache_response
-from utils.crypto_data import (fetch_coin_info, fetch_coins_by_category,
-                               fetch_current_price, fetch_top_gainers_losers,
-                               fetch_trending_coins, validate_ticker)
+from utils.crypto_data import (
+    fetch_coin_info,
+    fetch_coins_by_category,
+    fetch_current_price,
+    fetch_top_gainers_losers,
+    fetch_trending_coins,
+    validate_ticker,
+)
 from utils.paginators import ButtonPaginator as Paginator
 
 logger = setup_logging()
