@@ -35,7 +35,7 @@ ABOVE_VWAP = 1.01
 BELOW_VWAP = 0.99
 # Threshold for large market orders in USD
 # $100,000 - 100k USD might change or make it dynamic
-LARGE_ORDER_THRESHOLD = 10000
+LARGE_ORDER_THRESHOLD = 1000000
 # timeout duration for alerts in seconds (4 hours)
 alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
