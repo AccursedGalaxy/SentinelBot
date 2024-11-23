@@ -52,9 +52,7 @@ def cleanup_report_files(file_paths: List[str]) -> None:
             logger.info("Deleted file: %s", file_path)
 
 
-async def fetch_coins_by_category(
-    category: str, api_key: str | None = CG_API_KEY
-) -> List[Dict]:
+async def fetch_coins_by_category(category: str, api_key: str | None = CG_API_KEY) -> List[Dict]:
     """Fetch all coins belonging to a specific category.
 
     Args:
@@ -89,8 +87,7 @@ async def fetch_coins_by_category(
                     page += 1
                 else:
                     logger.error(
-                        "Failed to fetch coins by category '%s'. "
-                        "Status: %s. Response: %s",
+                        "Failed to fetch coins by category '%s'. " "Status: %s. Response: %s",
                         category,
                         response.status,
                         await response.text(),
@@ -153,16 +150,14 @@ async def analyze_categories(
             market_cap_change_percentage = (
                 category["market_cap_change_24h"] / total_market_cap_change_24h
             )
-            normalized_money_flow = (
-                volume_percentage - market_cap_change_percentage
-            ) / (volume_percentage + market_cap_change_percentage)
+            normalized_money_flow = (volume_percentage - market_cap_change_percentage) / (
+                volume_percentage + market_cap_change_percentage
+            )
             money_flow_analysis[category["name"]] = normalized_money_flow
 
     top_categories = sorted(
         categories,
-        key=lambda x: abs(
-            x["market_cap_change_24h"] if x["market_cap_change_24h"] else 0
-        ),
+        key=lambda x: abs(x["market_cap_change_24h"] if x["market_cap_change_24h"] else 0),
         reverse=True,
     )[:5]
     logger.info("Top categories: %s", [category["name"] for category in top_categories])
@@ -182,11 +177,7 @@ def plot_performance(categories: List[Dict], title: str) -> None:
 
     names = [category["name"] for category in categories]
     values = [
-        (
-            category["market_cap_change_24h"]
-            if category["market_cap_change_24h"] is not None
-            else 0
-        )
+        (category["market_cap_change_24h"] if category["market_cap_change_24h"] is not None else 0)
         for category in categories
     ]
 
@@ -205,9 +196,7 @@ def plot_money_flow(money_flow_analysis: Dict[str, float]) -> None:
     Args:
         money_flow_analysis: Dictionary mapping category names to flow values
     """
-    top_categories = sorted(
-        money_flow_analysis.items(), key=lambda x: abs(x[1]), reverse=True
-    )[:10]
+    top_categories = sorted(money_flow_analysis.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
     labels, values = zip(*top_categories)
 
     inflows = [value if value > 0 else 0 for value in values]

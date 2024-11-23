@@ -56,9 +56,7 @@ async def fetch_coin_info(symbol, api_key=CG_API_KEY):
         async with aiohttp.ClientSession() as session:
             async with session.get(coins_url) as response:
                 if response.status != 200:
-                    return {
-                        "error": f"Failed to fetch coins list, status code: {response.status}"
-                    }
+                    return {"error": f"Failed to fetch coins list, status code: {response.status}"}
                 coins_list = await response.json()
                 with open(COIN_LIST_CACHE_FILE, "w") as file:
                     json.dump(coins_list, file)
@@ -122,14 +120,10 @@ async def validate_ticker(ticker):
             raise Exception("Failed to fetch markets")
 
         # Debug: Print out a few market symbols to check format
-        logger.info(
-            f"Sample market symbols: {[market['symbol'] for market in markets[:5]]}"
-        )
+        logger.info(f"Sample market symbols: {[market['symbol'] for market in markets[:5]]}")
 
         # Modify this line if market symbols are in a different format
-        ticker_found = any(
-            market["symbol"].replace("/", "") == ticker for market in markets
-        )
+        ticker_found = any(market["symbol"].replace("/", "") == ticker for market in markets)
         if not ticker_found:
             raise Exception(f"Ticker '{ticker}' not found in exchange markets")
 
@@ -208,9 +202,7 @@ async def fetch_ohlcv(symbol, timeframe, since=None, limit=None):
             await exchange.close()
 
 
-async def fetch_top_gainers_losers(
-    api_key, category="gainers", time_period="24h", top_coins=300
-):
+async def fetch_top_gainers_losers(api_key, category="gainers", time_period="24h", top_coins=300):
     url = "https://pro-api.coingecko.com/api/v3/coins/top_gainers_losers"
     headers = {
         "x-cg-pro-api-key": api_key,
@@ -323,15 +315,9 @@ async def fetch_coin_data(coin_id, api_key=CG_API_KEY):
                     "hashing_algorithm": data["hashing_algorithm"],
                     "description": data["description"]["en"],
                     "genesis_date": data["genesis_date"],
-                    "sentiment_votes_up_percentage": data[
-                        "sentiment_votes_up_percentage"
-                    ],
-                    "sentiment_votes_down_percentage": data[
-                        "sentiment_votes_down_percentage"
-                    ],
-                    "market_cap_rank": data.get(
-                        "market_cap_rank"
-                    ),  # Use get to avoid KeyError
+                    "sentiment_votes_up_percentage": data["sentiment_votes_up_percentage"],
+                    "sentiment_votes_down_percentage": data["sentiment_votes_down_percentage"],
+                    "market_cap_rank": data.get("market_cap_rank"),  # Use get to avoid KeyError
                     "community_data": data["community_data"],
                     "developer_data": data["developer_data"],
                     "links": data["links"],

@@ -1,3 +1,10 @@
+"""
+Alerts Module.
+
+This module provides functionality to analyze cryptocurrency data and send alerts based on various conditions.
+It includes tools for fetching candlestick data, calculating technical indicators, and sending alerts to Discord channels.
+"""
+
 import asyncio
 import statistics
 from datetime import datetime, timedelta
@@ -37,9 +44,8 @@ sleep_time = 60  # 1 minute
 class CryptoAnalyzer:
     """Class to analyze cryptocurrency data and send alerts."""
 
-    def __init__(
-        self, exchange_id, timeframe, lookback_days, bot, alert_channels, ping_roles
-    ):
+    def __init__(self, exchange_id, timeframe, lookback_days, bot, alert_channels, ping_roles):
+        """Initialize the CryptoAnalyzer with the given parameters."""
         self.exchange_id = exchange_id
         self.timeframe = timeframe
         self.lookback_days = lookback_days
@@ -51,14 +57,13 @@ class CryptoAnalyzer:
 
     async def calculate_moving_average(self, symbol, period):
         """Calculate the moving average of a given symbol."""
-        since = self.exchange.parse8601(
-            str(datetime.now() - timedelta(days=period * 2))
-        )
+        since = self.exchange.parse8601(str(datetime.now() - timedelta(days=period * 2)))
         candles = await self.exchange.fetch_ohlcv(symbol, self.timeframe, since)
         closes = [candle[4] for candle in candles]
         return statistics.mean(closes)
 
     async def calculate_rsi(self, symbol, period=14):
+        """Calculate the Relative Strength Index (RSI) of a given symbol."""
         candles = await self.fetch_candles(symbol)
         changes = [candles[i][4] - candles[i - 1][4] for i in range(1, len(candles))]
 
@@ -76,9 +81,8 @@ class CryptoAnalyzer:
 
         return rsi
 
-    async def calculate_macd(
-        self, symbol, short_period=12, long_period=26, signal_period=9
-    ):
+    async def calculate_macd(self, symbol, short_period=12, long_period=26, signal_period=9):
+        """Calculate the Moving Average Convergence Divergence (MACD) of a given symbol."""
         candles = await self.fetch_candles(symbol)
         closes = [candle[4] for candle in candles]
 
@@ -97,12 +101,9 @@ class CryptoAnalyzer:
 
     async def calculate_vwap(self, symbol):
         """Optimized calculation of the Volume Weighted Average Price (VWAP)."""
-
         candles = await self.fetch_candles(symbol)
 
-        typical_prices = np.array(
-            [(candle[2] + candle[3] + candle[4]) / 3 for candle in candles]
-        )
+        typical_prices = np.array([(candle[2] + candle[3] + candle[4]) / 3 for candle in candles])
 
         volumes = np.array([candle[5] for candle in candles])
 
@@ -116,9 +117,7 @@ class CryptoAnalyzer:
 
     async def plot_ohlcv(self, symbol, candles, alert_type=None):
         """Optimized plotting of OHLCV data."""
-        dates = np.array(
-            [datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles]
-        )
+        dates = np.array([datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles])
         closes = np.array([candle[4] for candle in candles])
         highs = np.array([candle[2] for candle in candles])
         lows = np.array([candle[3] for candle in candles])
@@ -141,12 +140,8 @@ class CryptoAnalyzer:
         )
 
         # Main plot with closing prices and VWAP
-        fig.add_trace(
-            go.Scatter(x=dates, y=closes, mode="lines", name="Close"), row=1, col=1
-        )
-        fig.add_trace(
-            go.Scatter(x=dates, y=vwaps, mode="lines", name="VWAP"), row=1, col=1
-        )
+        fig.add_trace(go.Scatter(x=dates, y=closes, mode="lines", name="Close"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=dates, y=vwaps, mode="lines", name="VWAP"), row=1, col=1)
 
         # Volume plot
         fig.add_trace(go.Bar(x=dates, y=volumes, name="Volume"), row=2, col=1)
@@ -157,9 +152,7 @@ class CryptoAnalyzer:
         macd_dates = dates[-len(macd) :]
 
         # MACD plot
-        fig.add_trace(
-            go.Scatter(x=macd_dates, y=macd, mode="lines", name="MACD"), row=3, col=1
-        )
+        fig.add_trace(go.Scatter(x=macd_dates, y=macd, mode="lines", name="MACD"), row=3, col=1)
         fig.add_trace(
             go.Scatter(x=macd_dates, y=signal, mode="lines", name="Signal Line"),
             row=3,
@@ -193,6 +186,7 @@ class CryptoAnalyzer:
     async def send_discord_alert(
         self, title, description, color, image_bytes=None, alert_type=None
     ):
+        """Send an alert to the Discord channel."""
         # Determine the channel based on the alert type
         channel = await self.get_alert_channel(alert_type)
 
@@ -216,9 +210,7 @@ class CryptoAnalyzer:
     async def should_send_alert(self, symbol, alert_type):
         """Check if an alert should be sent for a given symbol and alert type."""
         last_alert = (
-            self.db.session.query(Alert)
-            .filter_by(symbol=symbol, alert_type=alert_type)
-            .first()
+            self.db.session.query(Alert).filter_by(symbol=symbol, alert_type=alert_type).first()
         )
         if (
             last_alert
@@ -230,11 +222,7 @@ class CryptoAnalyzer:
 
     async def update_last_alert_time(self, symbol, alert_type):
         """Update the last alert time for a given symbol and alert type in the database."""
-        alert = (
-            self.db.session.query(Alert)
-            .filter_by(symbol=symbol, alert_type=alert_type)
-            .first()
-        )
+        alert = self.db.session.query(Alert).filter_by(symbol=symbol, alert_type=alert_type).first()
         if alert:
             alert.last_alerted_at = datetime.now()
         else:
@@ -249,9 +237,7 @@ class CryptoAnalyzer:
 
     async def fetch_candles(self, symbol):
         """Fetch Chart data for a given symbol."""
-        since = self.exchange.parse8601(
-            str(datetime.now() - timedelta(days=self.lookback_days))
-        )
+        since = self.exchange.parse8601(str(datetime.now() - timedelta(days=self.lookback_days)))
         candles = await self.exchange.fetch_ohlcv(symbol, self.timeframe, since)
         return candles
 
@@ -283,9 +269,7 @@ class CryptoAnalyzer:
         title = f"\n🔔 RVOL Alert: {symbol} 🔔"
         description = self.generate_alert_description(coin_data, current_volume)
         filename = await self.plot_ohlcv(symbol, candles)
-        await self.send_discord_alert(
-            title, description, disnake.Color.green(), filename
-        )
+        await self.send_discord_alert(title, description, disnake.Color.green(), filename)
         await self.update_last_alert_time(symbol, alert_type="RVOL")
 
     def generate_alert_description(self, coin_data, current_volume):
@@ -294,12 +278,8 @@ class CryptoAnalyzer:
         description += f"**{coin_data['name']} ({coin_data['symbol'].upper()})**\n"
 
         # Check if 'usd' key exists in current_price and total_volume
-        current_price = coin_data["market_data"]["current_price"].get(
-            "usd", "Data not available"
-        )
-        total_volume = coin_data["market_data"]["total_volume"].get(
-            "usd", "Data not available"
-        )
+        current_price = coin_data["market_data"]["current_price"].get("usd", "Data not available")
+        total_volume = coin_data["market_data"]["total_volume"].get("usd", "Data not available")
 
         description += (
             f"Current Price: ${format_number(current_price)}\n"
@@ -312,9 +292,7 @@ class CryptoAnalyzer:
             else "24h Volume: Data not available\n"
         )
 
-        change_24h = coin_data["market_data"][
-            "price_change_percentage_24h_in_currency"
-        ].get("usd")
+        change_24h = coin_data["market_data"]["price_change_percentage_24h_in_currency"].get("usd")
         if change_24h and isinstance(change_24h, (float, int)):
             description += f"24h Change: {change_24h:.2f}%\n"
         else:
@@ -322,12 +300,10 @@ class CryptoAnalyzer:
 
         return description
 
-    async def check_and_alert_rvol_extreme(
-        self, symbol, candles, current_volume, average_volume
-    ):
-        if (
-            current_volume > RVOL_UP_EXTREME * average_volume
-            and await self.should_send_alert(symbol, "RVOL_UP_EXTREME")
+    async def check_and_alert_rvol_extreme(self, symbol, candles, current_volume, average_volume):
+        """Check and send alerts for extreme RVOL conditions."""
+        if current_volume > RVOL_UP_EXTREME * average_volume and await self.should_send_alert(
+            symbol, "RVOL_UP_EXTREME"
         ):
             title = f"\n🔔 Extreme RVOL Alert 🔔"
             description = f"{symbol}: Current volume is **significantly** higher than the average."
@@ -341,23 +317,14 @@ class CryptoAnalyzer:
             )
             await self.update_last_alert_time(symbol, "RVOL_UP_EXTREME")
 
-    async def check_and_alert_macd_crossover(
-        self, symbol, candles, macd, signal, histogram
-    ):
-        macd_crossover_up = (
-            macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
-        )
-        macd_crossover_down = (
-            macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
-        )
+    async def check_and_alert_macd_crossover(self, symbol, candles, macd, signal, histogram):
+        """Check and send alerts for MACD crossovers."""
+        macd_crossover_up = macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
+        macd_crossover_down = macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
 
-        if macd_crossover_up and await self.should_send_alert(
-            symbol, "MACD_CROSSOVER_UP"
-        ):
+        if macd_crossover_up and await self.should_send_alert(symbol, "MACD_CROSSOVER_UP"):
             title = f"\n🔔 MACD Crossover Up Alert 🔔"
-            description = (
-                f"{symbol}: MACD line has just crossed **above** the signal line."
-            )
+            description = f"{symbol}: MACD line has just crossed **above** the signal line."
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_UP")
             await self.send_discord_alert(
                 title,
@@ -368,13 +335,9 @@ class CryptoAnalyzer:
             )
             await self.update_last_alert_time(symbol, "MACD_CROSSOVER_UP")
 
-        if macd_crossover_down and await self.should_send_alert(
-            symbol, "MACD_CROSSOVER_DOWN"
-        ):
+        if macd_crossover_down and await self.should_send_alert(symbol, "MACD_CROSSOVER_DOWN"):
             title = f"\n🔔 MACD Crossover Down Alert 🔔"
-            description = (
-                f"{symbol}: MACD line has just crossed **below** the signal line."
-            )
+            description = f"{symbol}: MACD line has just crossed **below** the signal line."
             image_bytes = await self.plot_ohlcv(symbol, candles, "MACD_CROSSOVER_DOWN")
             await self.send_discord_alert(
                 title,
@@ -388,22 +351,15 @@ class CryptoAnalyzer:
     async def check_and_alert_rvol_macd_cross(
         self, symbol, candles, current_volume, average_volume, macd, signal
     ):
-        macd_crossover_up = (
-            macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
-        )
-        macd_crossover_down = (
-            macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
-        )
+        """Check and send alerts for RVOL and MACD crossovers."""
+        macd_crossover_up = macd.iloc[-2] < signal.iloc[-2] and macd.iloc[-1] > signal.iloc[-1]
+        macd_crossover_down = macd.iloc[-2] > signal.iloc[-2] and macd.iloc[-1] < signal.iloc[-1]
 
         if current_volume > RVOL_UP * average_volume:
-            if macd_crossover_up and await self.should_send_alert(
-                symbol, "RVOL_MACD_CROSS_UP"
-            ):
+            if macd_crossover_up and await self.should_send_alert(symbol, "RVOL_MACD_CROSS_UP"):
                 title = f"\n🔔 RVOL Up & MACD Cross Up Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **above** the signal line."
-                image_bytes = await self.plot_ohlcv(
-                    symbol, candles, "RVOL_MACD_CROSS_UP"
-                )
+                image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_MACD_CROSS_UP")
                 await self.send_discord_alert(
                     title,
                     description,
@@ -413,14 +369,10 @@ class CryptoAnalyzer:
                 )
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_UP")
 
-            if macd_crossover_down and await self.should_send_alert(
-                symbol, "RVOL_MACD_CROSS_DOWN"
-            ):
+            if macd_crossover_down and await self.should_send_alert(symbol, "RVOL_MACD_CROSS_DOWN"):
                 title = f"\n🔔 RVOL Up & MACD Cross Down Alert 🔔"
                 description = f"{symbol}: RVOL is up, and MACD line has just crossed **below** the signal line."
-                image_bytes = await self.plot_ohlcv(
-                    symbol, candles, "RVOL_MACD_CROSS_DOWN"
-                )
+                image_bytes = await self.plot_ohlcv(symbol, candles, "RVOL_MACD_CROSS_DOWN")
                 await self.send_discord_alert(
                     title,
                     description,
@@ -431,14 +383,12 @@ class CryptoAnalyzer:
                 await self.update_last_alert_time(symbol, "RVOL_MACD_CROSS_DOWN")
 
     async def check_and_alert_vwap(self, symbol, candles):
-        """This function will check if price is near VWAP and volume is high."""
+        """Check if price is near VWAP and volume is high, then send alerts."""
         vwap = await self.calculate_vwap(symbol)
         current_price = candles[-1][4]
 
-        if (
-            # check if price is within 1% of VWAP and RVOL is up
-            BELOW_VWAP * vwap < current_price < ABOVE_VWAP * vwap
-            and await self.should_send_alert(symbol, "VWAP_ALERT")
+        if BELOW_VWAP * vwap < current_price < ABOVE_VWAP * vwap and await self.should_send_alert(
+            symbol, "VWAP_ALERT"
         ):
             title = f"\n🔔 VWAP Alert 🔔"
             description = f"{symbol}: Price is above VWAP and volume is significantly higher than the average."
@@ -453,6 +403,7 @@ class CryptoAnalyzer:
             await self.update_last_alert_time(symbol, "VWAP_ALERT")
 
     async def fetch_and_alert_large_orders(self, symbol):
+        """Fetch large market orders and send alerts if necessary."""
         try:
             exchange = await get_exchange("binance")
             if not exchange:
@@ -475,12 +426,9 @@ class CryptoAnalyzer:
                 await exchange.close()
 
     async def send_large_order_alert(self, symbol, order):
+        """Send an alert for a large market order."""
         try:
-            if (
-                not isinstance(order, dict)
-                or "amount" not in order
-                or "price" not in order
-            ):
+            if not isinstance(order, dict) or "amount" not in order or "price" not in order:
                 logger.error(f"Invalid order format for {symbol}: {order}")
                 return
 
@@ -505,12 +453,13 @@ class CryptoAnalyzer:
             logger.error(f"Failed to send large order alert for {symbol}: {e}")
 
     async def process_symbol(self, symbol):
+        """Process a given symbol and send alerts based on various conditions."""
         logger.info(f"Processing symbol {symbol}")
         try:
             candles = await self.fetch_candles(symbol)
             if candles:
                 # Calculate MACD and histogram once
-                macd, signal = await self.calculate_macd(symbol)
+                macd, signal = await self.calculate_macd(candles)
                 histogram = macd - signal
 
                 # Calculate volume metrics once
@@ -546,17 +495,12 @@ class CryptoAnalyzer:
             symbol
             for symbol in self.exchange.symbols
             if symbol.endswith("/USDT")
-            and all(
-                keyword not in symbol
-                for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"]
-            )
+            and all(keyword not in symbol for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"])
         ]
 
         while True:
             for symbol in symbols:
                 if "/" in symbol:
                     await self.process_symbol(symbol)
-            logger.info(
-                f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds."
-            )
+            logger.info(f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds.")
             await asyncio.sleep(sleep_time)

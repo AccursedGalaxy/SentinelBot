@@ -12,9 +12,7 @@ logger = setup_logging()
 
 def is_creator():
     def predicate(ctx):
-        if str(ctx.author.id) == str(
-            CREATOR_ID
-        ):  # Ensuring both are strings for comparison
+        if str(ctx.author.id) == str(CREATOR_ID):  # Ensuring both are strings for comparison
             return True
         return False
 
@@ -34,9 +32,7 @@ def is_lowcaphunter():
     async def predicate(ctx):
         moderator_role_name = "LowCapHunter"  # Replace with your role name
         if ctx.guild:  # Check if the command is used in a server
-            moderator_role = disnake.utils.get(
-                ctx.guild.roles, name=moderator_role_name
-            )
+            moderator_role = disnake.utils.get(ctx.guild.roles, name=moderator_role_name)
             if moderator_role and moderator_role in ctx.author.roles:
                 return True
         await ctx.send(

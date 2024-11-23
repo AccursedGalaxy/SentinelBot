@@ -181,9 +181,7 @@ async def load_cogs():
 async def get_alerts_channel():
     session = Database.get_session()
     try:
-        alerts_channel = (
-            session.query(AlertsChannel).filter_by(guild_id=TEST_GUILDS).first()
-        )
+        alerts_channel = session.query(AlertsChannel).filter_by(guild_id=TEST_GUILDS).first()
         if alerts_channel:
             return alerts_channel.channel_id
     finally:

@@ -24,9 +24,7 @@ class AdminCommands(commands.Cog, name="Admin Commands"):
     ):
         session = Database.get_session()
         try:
-            alerts_channel = (
-                session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
-            )
+            alerts_channel = session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
             if alerts_channel:
                 alerts_channel.channel_id = channel.id
                 alerts_channel.channel_name = channel.name
@@ -51,9 +49,7 @@ class AdminCommands(commands.Cog, name="Admin Commands"):
     async def remove_alerts_channel(self, inter: disnake.ApplicationCommandInteraction):
         session = Database.get_session()
         try:
-            alerts_channel = (
-                session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
-            )
+            alerts_channel = session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
             if alerts_channel:
                 session.delete(alerts_channel)
                 session.commit()
@@ -72,9 +68,7 @@ class AdminCommands(commands.Cog, name="Admin Commands"):
     async def show_alerts_channel(self, inter: disnake.ApplicationCommandInteraction):
         session = Database.get_session()
         try:
-            alerts_channel = (
-                session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
-            )
+            alerts_channel = session.query(AlertsChannel).filter_by(guild_id=inter.guild.id).first()
             if alerts_channel:
                 # respond with the channel as clickable link
                 await inter.response.send_message(

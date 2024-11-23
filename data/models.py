@@ -60,14 +60,11 @@ class AlertsChannel(Base):
     guild_id = Column(BigInteger)
 
     def __repr__(self):
-        return (
-            "<AlertsChannel(id='%s', channel_id='%s', channel_name='%s', guild_id='%s')>"
-            % (
-                self.id,
-                self.channel_id,
-                self.channel_name,
-                self.guild_id,
-            )
+        return "<AlertsChannel(id='%s', channel_id='%s', channel_name='%s', guild_id='%s')>" % (
+            self.id,
+            self.channel_id,
+            self.channel_name,
+            self.guild_id,
         )
 
 
@@ -80,14 +77,11 @@ class CommandsChannel(Base):
     guild_id = Column(BigInteger)
 
     def __repr__(self):
-        return (
-            "<CommandsChannel(id='%s', channel_id='%s', channel_name='%s', guild_id='%s')>"
-            % (
-                self.id,
-                self.channel_id,
-                self.channel_name,
-                self.guild_id,
-            )
+        return "<CommandsChannel(id='%s', channel_id='%s', channel_name='%s', guild_id='%s')>" % (
+            self.id,
+            self.channel_id,
+            self.channel_name,
+            self.guild_id,
         )
 
 

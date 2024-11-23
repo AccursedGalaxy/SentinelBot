@@ -60,11 +60,7 @@ async def generate_bar_chart(coins, category):
 
     # Create the figure
     fig = go.Figure(
-        data=[
-            go.Bar(
-                x=coin_names, y=price_changes, marker_color=colors, text=price_changes
-            )
-        ]
+        data=[go.Bar(x=coin_names, y=price_changes, marker_color=colors, text=price_changes)]
     )
 
     # Customize layout
@@ -95,15 +91,13 @@ async def generate_pie_chart(coins_data):
     )
     labels = [coin["name"] for coin in sorted_coins[:5]]
     sizes = [
-        coin["market_cap"] if coin["market_cap"] is not None else 0
-        for coin in sorted_coins[:5]
+        coin["market_cap"] if coin["market_cap"] is not None else 0 for coin in sorted_coins[:5]
     ]
     # Ensure that the pie chart includes other coins as well
     labels.append("Others")
     sizes.append(
         sum(
-            coin["market_cap"] if coin["market_cap"] is not None else 0
-            for coin in sorted_coins[5:]
+            coin["market_cap"] if coin["market_cap"] is not None else 0 for coin in sorted_coins[5:]
         )
     )
 
@@ -180,18 +174,14 @@ class CryptoCommands(commands.Cog):
         await inter.response.defer()
 
         if not await validate_ticker(ticker):
-            await inter.edit_original_message(
-                content=f"Invalid ticker: {ticker.upper()}"
-            )
+            await inter.edit_original_message(content=f"Invalid ticker: {ticker.upper()}")
             return
 
         # Get current price
         price = await fetch_current_price(ticker)
 
         # Send message
-        await inter.edit_original_response(
-            content=f"Current price of {ticker.upper()}: ${price}"
-        )
+        await inter.edit_original_response(content=f"Current price of {ticker.upper()}: ${price}")
 
     @commands.slash_command(
         name="coin",
@@ -204,15 +194,11 @@ class CryptoCommands(commands.Cog):
         # Fetch coin data
         coin_data = await fetch_coin_info(ticker)
         if not coin_data or "name" not in coin_data or "symbol" not in coin_data:
-            await inter.followup.send(
-                f"No data available or incomplete data for {ticker.upper()}."
-            )
+            await inter.followup.send(f"No data available or incomplete data for {ticker.upper()}.")
             return
 
         # Create a short description
-        short_description = (
-            coin_data.get("description", {}).get("en", "").split(". ")[0] + "."
-        )
+        short_description = coin_data.get("description", {}).get("en", "").split(". ")[0] + "."
 
         # Create the embed
         embed = disnake.Embed(
@@ -279,9 +265,7 @@ class CryptoCommands(commands.Cog):
         sparkline = coin_data["market_data"]["sparkline_7d"]["price"]
         if sparkline:
             # Convert sparkline values to floats
-            sparkline_floats = [
-                float(price) for price in sparkline if price is not None
-            ]
+            sparkline_floats = [float(price) for price in sparkline if price is not None]
 
             # Create a Plotly figure
             fig = go.Figure()
@@ -307,9 +291,7 @@ class CryptoCommands(commands.Cog):
             # Calculate min and max for the y-axis, ensuring all values are floats
             min_price = min(sparkline_floats)
             max_price = max(sparkline_floats)
-            padding = (
-                max_price - min_price
-            ) * 0.1  # Add 10% padding for better visualization
+            padding = (max_price - min_price) * 0.1  # Add 10% padding for better visualization
 
             # Update the layout of the figure with improved aesthetics
             fig.update_layout(
@@ -345,9 +327,7 @@ class CryptoCommands(commands.Cog):
     @cache_response(3600)
     async def gainers(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer()
-        top_gainers = await fetch_top_gainers_losers(
-            api_key=CG_API_KEY, category="gainers"
-        )
+        top_gainers = await fetch_top_gainers_losers(api_key=CG_API_KEY, category="gainers")
         if top_gainers:
             chart_path = await generate_bar_chart(top_gainers, "gainers")
             embed = disnake.Embed(
@@ -370,9 +350,7 @@ class CryptoCommands(commands.Cog):
     @cache_response(3600)
     async def losers(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer()
-        top_losers = await fetch_top_gainers_losers(
-            api_key=CG_API_KEY, category="losers"
-        )
+        top_losers = await fetch_top_gainers_losers(api_key=CG_API_KEY, category="losers")
         if top_losers:
             chart_path = await generate_bar_chart(top_losers, "losers")
             embed = disnake.Embed(
@@ -437,7 +415,8 @@ class CryptoCommands(commands.Cog):
                 market_cap = coin_details.get("data", {}).get("market_cap", "N/A")
                 total_volume = coin_details.get("data", {}).get("total_volume", "N/A")
 
-                # Format numbers and percentages using the format_number and format_currency functions
+                # Format numbers and percentages using the format_number and
+                # format_currency functions
                 if isinstance(price, (int, float)):
                     price = f"${format_number(price)}"
                 if isinstance(change_24h, (int, float)):
@@ -491,9 +470,7 @@ class CryptoCommands(commands.Cog):
         # Filter the fetched categories to include only those in the CATEGORIES env
         filtered_category_ids = CATEGORIES.split(",")
         filtered_categories = [
-            category
-            for category in categories
-            if category["category_id"] in filtered_category_ids
+            category for category in categories if category["category_id"] in filtered_category_ids
         ]
         # Prepare the filtered categories for pagination, 25 per page
         category_pages = []
@@ -508,9 +485,7 @@ class CryptoCommands(commands.Cog):
             category_list = "\n".join(
                 [
                     f"{i + index + 1}. {category['category_id']}"
-                    for index, category in enumerate(
-                        filtered_categories[i : i + items_per_page]
-                    )
+                    for index, category in enumerate(filtered_categories[i : i + items_per_page])
                 ]
             )
             embed.add_field(
@@ -529,17 +504,13 @@ class CryptoCommands(commands.Cog):
         description="Shows aggregated stats about coins in a specified category.",
     )
     @cache_response(3600)
-    async def category(
-        self, inter: disnake.ApplicationCommandInteraction, category: str
-    ):
+    async def category(self, inter: disnake.ApplicationCommandInteraction, category: str):
         """Shows aggregated stats about coins in a specified category."""
         await inter.response.defer()
         coins_data = await fetch_coins_by_category(category)
 
         if not coins_data:
-            await inter.followup.send(
-                f"Failed to retrieve data for category: {category}"
-            )
+            await inter.followup.send(f"Failed to retrieve data for category: {category}")
             return
 
         # Generate a pie chart for the market cap distribution
@@ -549,8 +520,7 @@ class CryptoCommands(commands.Cog):
         sparklines = [
             coin["sparkline_in_7d"]["price"]
             for coin in coins_data
-            if "sparkline_in_7d" in coin
-            and isinstance(coin["sparkline_in_7d"]["price"], list)
+            if "sparkline_in_7d" in coin and isinstance(coin["sparkline_in_7d"]["price"], list)
         ]
 
         # Handle cases where sparkline data may be missing or of unequal lengths
@@ -562,9 +532,7 @@ class CryptoCommands(commands.Cog):
         # Normalize the length of sparklines to handle missing data points
         min_length = min(len(sparkline) for sparkline in sparklines)
         normalized_sparklines = [
-            sparkline[:min_length]
-            for sparkline in sparklines
-            if len(sparkline) >= min_length
+            sparkline[:min_length] for sparkline in sparklines if len(sparkline) >= min_length
         ]
 
         # Calculate the average sparkline
@@ -585,9 +553,7 @@ class CryptoCommands(commands.Cog):
                 disnake.File(pie_chart_path, filename="market_cap_distribution.png")
             )
 
-        embed = create_category_embed(
-            category, coins_data, sparkline_image_path, pie_chart_path
-        )
+        embed = create_category_embed(category, coins_data, sparkline_image_path, pie_chart_path)
         await inter.followup.send(
             files=files_to_send,
             embed=embed,

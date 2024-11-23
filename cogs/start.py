@@ -16,9 +16,7 @@ class IntroView(disnake.ui.View):
     def update_footer(self):
         total_embeds = len(self.embeds)
         for i, embed in enumerate(self.embeds):
-            embed.set_footer(
-                text=f"Page {i + 1} of {total_embeds}. Use the buttons to navigate."
-            )
+            embed.set_footer(text=f"Page {i + 1} of {total_embeds}. Use the buttons to navigate.")
 
     @disnake.ui.button(label="Previous", style=disnake.ButtonStyle.red, disabled=True)
     async def previous_button(
@@ -26,17 +24,11 @@ class IntroView(disnake.ui.View):
     ):
         self.current_index -= 1
         button.disabled = self.current_index == 0
-        self.children[1].disabled = (
-            self.current_index == len(self.embeds) - 1
-        )  # 'Next' button
-        await interaction.response.edit_message(
-            embed=self.embeds[self.current_index], view=self
-        )
+        self.children[1].disabled = self.current_index == len(self.embeds) - 1  # 'Next' button
+        await interaction.response.edit_message(embed=self.embeds[self.current_index], view=self)
 
     @disnake.ui.button(label="Next", style=disnake.ButtonStyle.green, disabled=False)
-    async def next_button(
-        self, button: disnake.ui.Button, interaction: disnake.MessageInteraction
-    ):
+    async def next_button(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction):
         if self.current_index < len(self.embeds) - 1:
             self.current_index += 1
             button.disabled = self.current_index == len(self.embeds) - 1
@@ -118,9 +110,7 @@ class StartCommand(commands.Cog):
 
         # Send the first embed with the image as an attachment
         file = disnake.File("assets/start1.png", filename="start1.png")
-        await inter.response.send_message(
-            embed=embeds[0], view=view, file=file, ephemeral=True
-        )
+        await inter.response.send_message(embed=embeds[0], view=view, file=file, ephemeral=True)
 
 
 def setup(bot):

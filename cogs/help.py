@@ -12,9 +12,7 @@ class HelpCommands(commands.Cog):
         self.bot = bot
 
     @commands.slash_command(description="Get help with commands.")
-    async def help(
-        self, inter: disnake.ApplicationCommandInteraction, command_name: str = None
-    ):
+    async def help(self, inter: disnake.ApplicationCommandInteraction, command_name: str = None):
         if command_name:
             # Find the command by name
             command = self.bot.get_slash_command(command_name)
@@ -31,17 +29,13 @@ class HelpCommands(commands.Cog):
             description=command.description or "No description",
             color=disnake.Color.blue(),
         )
-        usage = f"/{command.name} " + " ".join(
-            [f"<{option.name}>" for option in command.options]
-        )
+        usage = f"/{command.name} " + " ".join([f"<{option.name}>" for option in command.options])
         embed.add_field(name="Usage", value=usage, inline=False)
         await inter.send(embed=embed, ephemeral=True)
 
     async def send_general_help(self, inter):
         items_per_page = 5
-        commands_list = [
-            cmd for cmd in self.bot.slash_commands if await cmd.can_run(inter)
-        ]
+        commands_list = [cmd for cmd in self.bot.slash_commands if await cmd.can_run(inter)]
         total_pages = (len(commands_list) + items_per_page - 1) // items_per_page
         embeds = []
 
