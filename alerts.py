@@ -459,24 +459,12 @@ class CryptoAnalyzer:
             candles = await self.fetch_candles(symbol)
             if candles:
                 # Calculate MACD and histogram once
-                macd, signal = await self.calculate_macd(candles)
-                histogram = macd - signal
+                macd, signal = await self.calculate_macd(symbol)
 
                 # Calculate volume metrics once
                 volumes = [candle[5] for candle in candles]
                 average_volume = statistics.mean(volumes)
                 current_volume = candles[-1][5]
-
-                # NOTE: Commented out for now to avoid spamming unfinished alerts
-
-                # Check for various conditions and send alerts
-                # await self.check_and_alert_rvol_extreme(
-                #     symbol, candles, current_volume, average_volume
-                # )
-                # await self.check_and_alert_macd_crossover(
-                #     symbol, candles, macd, signal, histogram
-                # )
-                # await self.check_and_alert_vwap(symbol, candles)
 
                 await self.check_and_alert_rvol_macd_cross(
                     symbol, candles, current_volume, average_volume, macd, signal
