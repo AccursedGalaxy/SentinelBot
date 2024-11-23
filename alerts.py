@@ -616,17 +616,28 @@ class CryptoAnalyzer:
 
     async def run(self):
         """Main loop to process all symbols continuously."""
-        await self.exchange.load_markets()
-        symbols = [
-            symbol
-            for symbol in self.exchange.symbols
-            if symbol.endswith("/USDT")
-            and all(keyword not in symbol for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"])
-        ]
+        try:
+            await self.exchange.load_markets()
+            symbols = [
+                symbol
+                for symbol in self.exchange.symbols
+                if symbol.endswith("/USDT")
+                and all(
+                    keyword not in symbol for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"]
+                )
+            ]
 
-        while True:
-            for symbol in symbols:
-                if "/" in symbol:
-                    await self.process_symbol(symbol)
-            logger.info(f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds.")
-            await asyncio.sleep(sleep_time)
+            while True:
+                for symbol in symbols:
+                    if "/" in symbol:
+                        await self.process_symbol(symbol)
+                logger.info(
+                    f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds."
+                )
+                await asyncio.sleep(sleep_time)
+        except Exception as e:
+            logger.error(f"Error in run loop: {e}")
+        finally:
+            # Properly close the exchange connection when the bot stops
+            if hasattr(self, "exchange") and self.exchange:
+                await self.exchange.close()
