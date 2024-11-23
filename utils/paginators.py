@@ -36,27 +36,19 @@ class ButtonPaginator(disnake.ui.View):
             self.next_button.disabled = False
             if self.current_page == 0:
                 button.disabled = True
-            await interaction.response.edit_message(
-                embed=self.embeds[self.current_page], view=self
-            )
+            await interaction.response.edit_message(embed=self.embeds[self.current_page], view=self)
 
     @disnake.ui.button(label="Next", style=disnake.ButtonStyle.grey, disabled=False)
-    async def next_button(
-        self, button: disnake.ui.Button, interaction: disnake.MessageInteraction
-    ):
+    async def next_button(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction):
         if self.current_page < self.total_pages - 1:
             self.current_page += 1
             self.update_embed_footer()
             self.previous_button.disabled = False
             if self.current_page == self.total_pages - 1:
                 button.disabled = True
-            await interaction.response.edit_message(
-                embed=self.embeds[self.current_page], view=self
-            )
+            await interaction.response.edit_message(embed=self.embeds[self.current_page], view=self)
 
     async def run(self):
         # Defer the response
         await self.ctx.response.defer()
-        self.message = await self.ctx.send(
-            embed=self.embeds[self.current_page], view=self
-        )
+        self.message = await self.ctx.send(embed=self.embeds[self.current_page], view=self)

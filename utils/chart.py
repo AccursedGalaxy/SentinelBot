@@ -33,9 +33,7 @@ class PlotChart:
             ccxt.bybit(),
         ]
 
-        tasks = [
-            PlotChart.fetch_ohlcv(exchange, symbol, timeframe) for exchange in exchanges
-        ]
+        tasks = [PlotChart.fetch_ohlcv(exchange, symbol, timeframe) for exchange in exchanges]
         results = await asyncio.gather(*tasks)
 
         # Return the first successful result
@@ -55,9 +53,7 @@ class PlotChart:
         ohlcv = await PlotChart.get_ohlcv_data(symbol, time_frame)
 
         if ohlcv is None:
-            logger.error(
-                f"No exchange supports the market for {symbol} or data fetch failed."
-            )
+            logger.error(f"No exchange supports the market for {symbol} or data fetch failed.")
             return None
 
         # Define the time horizon for each time frame
@@ -74,20 +70,14 @@ class PlotChart:
 
         # Filter data based on the selected time frame
         start_time = datetime.now() - time_horizon.get(time_frame, timedelta(weeks=4))
-        ohlcv = [
-            entry
-            for entry in ohlcv
-            if datetime.fromtimestamp(entry[0] // 1000) >= start_time
-        ]
+        ohlcv = [entry for entry in ohlcv if datetime.fromtimestamp(entry[0] // 1000) >= start_time]
 
         if not ohlcv:
             logger.error(f"No data available for {symbol} in the specified time frame.")
             return None
 
         # Convert to DataFrame
-        df = pd.DataFrame(
-            ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"]
-        )
+        df = pd.DataFrame(ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
         df["Date"] = pd.to_datetime(df["Date"], unit="ms")
         df.set_index("Date", inplace=True)
 
@@ -147,9 +137,7 @@ class PlotChart:
                 rangeslider=dict(visible=False),
             ),
             yaxis=dict(title="Price (USDT)"),
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             template="plotly_dark",
             margin=dict(b=40, t=40, r=40, l=40),
         )
@@ -186,9 +174,7 @@ class PlotAllTimeChart:
             ccxt.bybit(),
         ]
 
-        tasks = [
-            PlotChart.fetch_ohlcv(exchange, symbol, timeframe) for exchange in exchanges
-        ]
+        tasks = [PlotChart.fetch_ohlcv(exchange, symbol, timeframe) for exchange in exchanges]
         results = await asyncio.gather(*tasks)
 
         # Return the first successful result
@@ -209,9 +195,7 @@ class PlotAllTimeChart:
         ohlcv = await PlotChart.get_ohlcv_data(symbol, time_frame)
 
         if ohlcv is None:
-            logger.error(
-                f"No exchange supports the market for {symbol} or data fetch failed."
-            )
+            logger.error(f"No exchange supports the market for {symbol} or data fetch failed.")
             return None
 
         # Define the time horizon for each time frame
@@ -221,20 +205,14 @@ class PlotAllTimeChart:
 
         # Filter data based on the selected time frame
         start_time = datetime.now() - time_horizon.get(time_frame, timedelta(weeks=4))
-        ohlcv = [
-            entry
-            for entry in ohlcv
-            if datetime.fromtimestamp(entry[0] // 1000) >= start_time
-        ]
+        ohlcv = [entry for entry in ohlcv if datetime.fromtimestamp(entry[0] // 1000) >= start_time]
 
         if not ohlcv:
             logger.error(f"No data available for {symbol} in the specified time frame.")
             return None
 
         # Convert to DataFrame
-        df = pd.DataFrame(
-            ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"]
-        )
+        df = pd.DataFrame(ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
         df["Date"] = pd.to_datetime(df["Date"], unit="ms")
         df.set_index("Date", inplace=True)
 
@@ -278,9 +256,7 @@ class PlotAllTimeChart:
                 rangeslider=dict(visible=False),
             ),
             yaxis=dict(title="Price (USDT)"),
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             template="plotly_dark",
             margin=dict(b=40, t=40, r=40, l=40),
         )
