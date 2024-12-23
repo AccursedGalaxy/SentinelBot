@@ -1,20 +1,28 @@
-[tool.black]
-line-length = 100
-target-version = ['py310']
-include = '\.pyi?$'
+[tool.poetry]
+name = "sentinelbot"
+version = "0.1.0"
+description = ""
+authors = ["AccursedGalaxy <robinbohrer7@gmail.com>"]
+readme = "README.md"
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 100
+[tool.poetry.dependencies]
+python = "^3.11"
+disnake = "^2.9.3"
+ccxt = "^4.4.42"
+python-dotenv = "^1.0.1"
+sqlalchemy = "^2.0.36"
+psycopg2-binary = "^2.9.10"
+propcache = "^0.2.1"
+scipy = "^1.14.1"
+statsmodels = "^0.14.4"
+scikit-learn = "^1.6.0"
+ta = "^0.11.0"
+black = "^24.10.0"
+ruff = "^0.8.4"
+mypy = "^1.14.0"
+pytest = "^8.3.4"
 
-[tool.ruff]
-line-length = 100
-target-version = "py310"
-lint.select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
-lint.ignore = ["E203", "E501"]
 
-[tool.mypy]
-python_version = "3.10"
-disallow_untyped_defs = true
-ignore_missing_imports = true
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

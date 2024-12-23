@@ -5,9 +5,8 @@ import time
 
 import aiohttp
 import ccxt.async_support as ccxt
-import requests
 
-from config.settings import CG_API_KEY, CMC_API_KEY
+from config.settings import CG_API_KEY
 from logger_config import setup_logging
 
 logger = setup_logging()
@@ -15,21 +14,14 @@ request_semaphore = asyncio.Semaphore(5)
 COIN_LIST_CACHE_FILE = "coin_list_cache.json"
 
 
-async def get_exchange(exchange_id):
-    """Get an exchange object."""
+async def get_exchange(exchange_id: str):
+    """Get exchange instance with proper error handling."""
     try:
-        if not isinstance(exchange_id, str):
-            raise ValueError("Exchange ID must be a string")
-
-        exchange_class = getattr(ccxt, exchange_id, None)
-        if not exchange_class:
-            raise ValueError(f"Exchange '{exchange_id}' not found in ccxt")
-
-        exchange = exchange_class()
+        exchange = getattr(ccxt, exchange_id)()
         await exchange.load_markets()
         return exchange
     except Exception as e:
-        logger.error(f"Error initializing exchange {exchange_id}: {e}")
+        logger.error(f"Failed to initialize {exchange_id} exchange: {e}")
         return None
 
 

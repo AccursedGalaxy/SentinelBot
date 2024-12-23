@@ -49,23 +49,17 @@ macd_alerts_channel = MACD_ALERTS_CHANNEL
 vwap_alerts_channel = VWAP_ALERTS_CHANNEL
 large_order_alerts_channel = LARGE_ORDERS_ALERTS_CHANNEL
 
+# Add new channel constant and role
+HOT_MARKET_CHANNEL = int(os.getenv("HOT_MARKET_CHANNEL", LARGE_ORDERS_ALERTS_CHANNEL))
+ping_hot_market = "<@&1217483711893733478>"  # You can create a new role ID for this
+
 alert_channels = {
-    # "RVOL_UP_EXTREME": rvol_alerts_channel,
-    "MACD_CROSSOVER_UP": macd_alerts_channel,
-    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
-    "RVOL_MACD_CROSS_UP": main_alerts_channel,
-    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
-    # "VWAP_ALERT": vwap_alerts_channel,
-    "LARGE_ORDER": large_order_alerts_channel,
+    "HOT_MARKET": HOT_MARKET_CHANNEL,
+    "LARGE_ORDER": large_order_alerts_channel,  # Keep this for backward compatibility
 }
 ping_roles = {
-    "RVOL_UP_EXTREME": ping_rvol_alerts,
-    "MACD_CROSSOVER_UP": ping_macd_alerts,
-    "MACD_CROSSOVER_DOWN": ping_macd_alerts,
-    "RVOL_MACD_CROSS_UP": ping_main_alerts,
-    "RVOL_MACD_CROSS_DOWN": ping_main_alerts,
-    "VWAP_ALERT": ping_vwap_alerts,
-    "LARGE_ORDER": ping_large_order_alerts,
+    "HOT_MARKET": ping_hot_market,
+    "LARGE_ORDER": ping_large_order_alerts,  # Keep this for backward compatibility
 }
 
 

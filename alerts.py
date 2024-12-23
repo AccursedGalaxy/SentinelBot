@@ -8,8 +8,11 @@ It includes tools for fetching candlestick data, calculating technical indicator
 import asyncio
 import os
 import statistics
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from io import BytesIO
+from typing import Dict, List
 
 import ccxt.async_support as ccxt
 import disnake
@@ -41,6 +44,140 @@ alert_timeout_duration = 60 * 60 * 4
 ma_short = 9
 ma_long = 21
 sleep_time = 60  # 1 minute
+ANALYSIS_WINDOW_HOURS = 4  # Hours to look back for order analysis
+TOP_SYMBOLS_COUNT = 5  # Number of "hot" symbols to track
+MIN_ORDER_SIZE_USD = 100000  # Minimum order size to track ($100k)
+VOLUME_UPDATE_INTERVAL = 300  # Seconds between volume analysis updates (5 min)
+MIN_VOLUME_THRESHOLD = 1000000  # Minimum volume to consider a symbol ($1M)
+SIGNIFICANT_PRICE_MOVE = 0.02  # 2% price move threshold
+VOLUME_SPIKE_THRESHOLD = 2.0  # 2x normal volume
+BUY_SELL_RATIO_THRESHOLD = 1.5  # Significant imbalance threshold
+
+
+@dataclass
+class TradeData:
+    timestamp: float
+    price: float
+    amount: float
+    side: str
+    total_value: float
+
+
+class MarketData:
+    def __init__(self, max_age_hours: int = 24):
+        self.trades: deque[TradeData] = deque(maxlen=1000)  # Limit maximum trades stored
+        self.max_age_seconds = max_age_hours * 3600
+        self.last_update = 0  # Track last update time
+
+    def add_trade(self, trade: dict):
+        """Add a new trade and remove old ones."""
+        current_time = datetime.now().timestamp()
+
+        # Only process if enough time has passed since last update
+        if current_time - self.last_update < 1:  # 1 second minimum between updates
+            return
+
+        trade_data = TradeData(
+            timestamp=trade["timestamp"] / 1000,
+            price=float(trade["price"]),
+            amount=float(trade["amount"]),
+            side=trade["side"],
+            total_value=float(trade["amount"]) * float(trade["price"]),
+        )
+
+        # Remove old trades
+        while self.trades and (current_time - self.trades[0].timestamp) > self.max_age_seconds:
+            self.trades.popleft()
+
+        self.trades.append(trade_data)
+        self.last_update = current_time
+
+    def calculate_metrics(self) -> dict:
+        """Calculate current metrics from stored trades."""
+        if not self.trades:
+            return {}
+
+        current_time = datetime.now().timestamp()
+        active_trades = [
+            t for t in self.trades if (current_time - t.timestamp) <= self.max_age_seconds
+        ]
+
+        if not active_trades:
+            return {}
+
+        # Basic metrics
+        total_volume = sum(t.total_value for t in active_trades)
+        buy_trades = [t for t in active_trades if t.side == "buy"]
+        sell_trades = [t for t in active_trades if t.side == "sell"]
+
+        # Time-based analysis
+        hourly_volumes = self._calculate_hourly_volumes(active_trades)
+        volume_trend = self._calculate_volume_trend(hourly_volumes)
+
+        # Price analysis
+        price_changes = self._calculate_price_changes(active_trades)
+
+        return {
+            "total_volume": total_volume,
+            "buy_volume": sum(t.total_value for t in buy_trades),
+            "sell_volume": sum(t.total_value for t in sell_trades),
+            "trade_count": len(active_trades),
+            "buy_count": len(buy_trades),
+            "sell_count": len(sell_trades),
+            "avg_trade_size": total_volume / len(active_trades),
+            "volume_trend": volume_trend,
+            "price_volatility": price_changes["volatility"],
+            "price_trend": price_changes["trend"],
+            "large_trades": self._identify_large_trades(active_trades),
+            "hourly_volumes": hourly_volumes,
+        }
+
+    def _calculate_hourly_volumes(self, trades: List[TradeData]) -> List[float]:
+        """Calculate volume for each hour in the last 24 hours."""
+        hours = [0] * 24
+        current_hour = datetime.now().hour
+
+        for trade in trades:
+            trade_hour = datetime.fromtimestamp(trade.timestamp).hour
+            hour_index = (trade_hour - current_hour) % 24
+            hours[hour_index] += trade.total_value
+
+        return hours
+
+    def _calculate_volume_trend(self, hourly_volumes: List[float]) -> float:
+        """Calculate volume trend using linear regression."""
+        if not any(hourly_volumes):
+            return 0
+
+        x = np.arange(len(hourly_volumes))
+        y = np.array(hourly_volumes)
+        slope, _ = np.polyfit(x, y, 1)
+
+        return slope
+
+    def _calculate_price_changes(self, trades: List[TradeData]) -> dict:
+        """Analyze price changes and volatility."""
+        prices = [t.price for t in trades]
+        changes = np.diff(prices) / prices[:-1]
+
+        return {
+            "volatility": np.std(changes) if len(changes) > 0 else 0,
+            "trend": (prices[-1] - prices[0]) / prices[0] if len(prices) > 1 else 0,
+        }
+
+    def _identify_large_trades(self, trades: List[TradeData]) -> List[TradeData]:
+        """Identify significant trades using dynamic thresholds."""
+        if not trades:
+            return []
+
+        volumes = [t.total_value for t in trades]
+        mean_volume = np.mean(volumes)
+        std_volume = np.std(volumes)
+
+        # Consider trades > 2 standard deviations above mean as large
+        threshold = mean_volume + (2 * std_volume)
+
+        return [t for t in trades if t.total_value > threshold]
 
 
 class CryptoAnalyzer:
@@ -51,11 +188,30 @@ class CryptoAnalyzer:
         self.exchange_id = exchange_id
         self.timeframe = timeframe
         self.lookback_days = lookback_days
-        self.exchange = getattr(ccxt, exchange_id)()
+        self.exchange = None  # Will be initialized in run()
         self.bot = bot
         self.alert_channels = alert_channels
         self.ping_roles = ping_roles
         self.db = Database()
+        self.market_data: Dict[str, MarketData] = {}
+        self.hot_symbols = set()
+
+    async def initialize_exchange(self):
+        """Initialize exchange connection."""
+        if self.exchange is None:
+            self.exchange = getattr(ccxt, self.exchange_id)()
+            await self.exchange.load_markets()
+
+            # Initialize market_data for USDT pairs
+            markets = await self.exchange.fetch_markets()
+            usdt_symbols = [
+                market["symbol"] for market in markets if market["symbol"].endswith("/USDT")
+            ]
+
+            for symbol in usdt_symbols:
+                self.market_data[symbol] = MarketData()
+
+            logger.info(f"Initialized {len(usdt_symbols)} USDT trading pairs")
 
     async def calculate_moving_average(self, symbol, period):
         """Calculate the moving average of a given symbol."""
@@ -405,36 +561,36 @@ class CryptoAnalyzer:
             await self.update_last_alert_time(symbol, "VWAP_ALERT")
 
     async def fetch_and_alert_large_orders(self, symbol):
-        """Fetch large market orders and send alerts if necessary."""
+        """Fetches and processes large market orders"""
         try:
             exchange = await get_exchange("binance")
             if not exchange:
                 raise Exception("Failed to initialize exchange")
 
+            # Fetch recent trades
             orders = await exchange.fetch_trades(symbol)
+
+            # Filter for large orders exceeding threshold
             large_orders = [
                 order
                 for order in orders
                 if order["amount"] * order["price"] > LARGE_ORDER_THRESHOLD
             ]
+
+            # Process each large order
             for order in large_orders:
                 if await self.should_send_alert(symbol, "LARGE_ORDER"):
                     await self.send_large_order_alert(symbol, order)
                     await self.update_last_alert_time(symbol, "LARGE_ORDER")
-        except Exception as e:
-            logger.error(f"Error processing large market orders for {symbol}: {e}")
+
         finally:
             if exchange:
                 await exchange.close()
 
     async def send_large_order_alert(self, symbol: str, order: dict) -> None:
-        """Send an alert for a large market order with a chart showing the order point.
-
-        Args:
-            symbol: Trading pair symbol (e.g. 'BTC/USDT')
-            order: Dictionary containing order details
-        """
+        """Sends alert with chart for large market orders"""
         try:
+            # Validate order data
             if not isinstance(order, dict) or "amount" not in order or "price" not in order:
                 logger.error(f"Invalid order format for {symbol}: {order}")
                 return
@@ -442,14 +598,13 @@ class CryptoAnalyzer:
             # Extract order details
             amount = float(order["amount"])
             price = float(order["price"])
-            timestamp = order.get("timestamp", datetime.now().timestamp() * 1000)  # Convert to ms
+            timestamp = order.get("timestamp", datetime.now().timestamp() * 1000)
             side = order.get("side", "unknown").capitalize()
 
-            # Generate chart with order indicator
-            timeframe = "15m"  # Use 15m timeframe for better detail around the order
+            # Generate chart showing the order
             chart_file = await self.generate_large_order_chart(
                 symbol=symbol,
-                timeframe=timeframe,
+                timeframe="15m",
                 order_price=price,
                 order_timestamp=timestamp,
                 order_side=side,
@@ -463,14 +618,14 @@ class CryptoAnalyzer:
                 f"Total: ${amount * price:.2f}\n"
             )
 
-            # Send alert with chart
+            # Send to Discord with chart
             channel = await self.get_alert_channel("LARGE_ORDER")
             if channel and chart_file:
                 with open(chart_file, "rb") as f:
                     discord_file = disnake.File(f, filename="large_order_chart.png")
                     await channel.send(content=message, file=discord_file)
 
-                # Clean up the chart file
+                # Cleanup
                 try:
                     os.remove(chart_file)
                 except Exception as e:
@@ -487,18 +642,7 @@ class CryptoAnalyzer:
         order_timestamp: float,
         order_side: str,
     ) -> str | None:
-        """Generate a chart with the large order indicator.
-
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Chart timeframe
-            order_price: Price at which the order was executed
-            order_timestamp: Timestamp of the order in milliseconds
-            order_side: Side of the order (Buy/Sell)
-
-        Returns:
-            Optional[str]: Path to the generated chart file, or None if generation failed
-        """
+        """Generates a chart with the large order indicator"""
         try:
             # Fetch OHLCV data
             ohlcv = await PlotChart.get_ohlcv_data(symbol.split("/")[0], timeframe)
@@ -506,16 +650,15 @@ class CryptoAnalyzer:
                 logger.error(f"Failed to fetch OHLCV data for {symbol}")
                 return None
 
-            # Convert to DataFrame
+            # Create DataFrame and calculate EMAs
             df = pd.DataFrame(ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
             df["Date"] = pd.to_datetime(df["Date"], unit="ms")
             df.set_index("Date", inplace=True)
 
-            # Calculate EMAs
             df["20ema"] = df["Close"].rolling(window=20).mean()
             df["50ema"] = df["Close"].rolling(window=50).mean()
 
-            # Create figure
+            # Create plot with candlesticks, EMAs and order marker
             fig = go.Figure()
 
             # Add candlestick chart
@@ -534,11 +677,6 @@ class CryptoAnalyzer:
             fig.add_trace(
                 go.Scatter(
                     x=df.index, y=df["20ema"], name="20 EMA", line=dict(color="green", width=1)
-                )
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=df.index, y=df["50ema"], name="50 EMA", line=dict(color="yellow", width=1)
                 )
             )
 
@@ -562,28 +700,9 @@ class CryptoAnalyzer:
                 )
             )
 
-            # Update layout
-            fig.update_layout(
-                title=f"{symbol} Large {order_side} Order",
-                xaxis=dict(
-                    type="date",
-                    tickformat="%H:%M %b-%d",
-                    tickmode="auto",
-                    nticks=10,
-                    rangeslider=dict(visible=False),
-                ),
-                yaxis=dict(title="Price (USDT)"),
-                template="plotly_dark",
-                margin=dict(b=40, t=40, r=40, l=40),
-            )
-
-            # Save chart
-            if not os.path.exists("charts"):
-                os.makedirs("charts")
-
+            # Save and return chart
             chart_file = f"charts/large_order_{symbol.replace('/', '_')}_{int(order_timestamp)}.png"
             fig.write_image(chart_file, scale=1.5, width=1000, height=600)
-
             return chart_file
 
         except Exception as e:
@@ -614,30 +733,347 @@ class CryptoAnalyzer:
         except Exception as e:
             logger.error(f"Unexpected error when processing {symbol}: {e!s}")
 
-    async def run(self):
-        """Main loop to process all symbols continuously."""
+    async def analyze_market_volume(self):
+        """Modified to use historical data for analysis."""
+        exchange = None
         try:
-            await self.exchange.load_markets()
-            symbols = [
-                symbol
-                for symbol in self.exchange.symbols
-                if symbol.endswith("/USDT")
-                and all(
-                    keyword not in symbol for keyword in ["UP", "DOWN", "BULL", "BEAR", ":USDT"]
-                )
-            ]
+            logger.info("Starting market volume analysis...")
+            exchange = await get_exchange("binance")
+            if not exchange:
+                raise Exception("Failed to initialize exchange")
 
-            while True:
-                for symbol in symbols:
-                    if "/" in symbol:
-                        await self.process_symbol(symbol)
+            # Process symbols in batches to avoid overloading
+            batch_size = 50
+            total_processed = 0
+            symbols = list(self.market_data.keys())
+
+            logger.info(f"Processing {len(symbols)} symbols in batches of {batch_size}")
+
+            for i in range(0, len(symbols), batch_size):
+                batch = symbols[i : i + batch_size]
                 logger.info(
-                    f"Completed one loop for all symbols. Sleeping for {sleep_time} seconds."
+                    f"Processing batch {i//batch_size + 1}/{(len(symbols) + batch_size - 1)//batch_size}"
                 )
-                await asyncio.sleep(sleep_time)
+
+                # Process batch with timeout protection
+                try:
+                    async with asyncio.timeout(60):  # 60 second timeout per batch
+                        for symbol in batch:
+                            try:
+                                trades = await exchange.fetch_trades(
+                                    symbol, limit=100  # Reduced limit for faster processing
+                                )
+
+                                if trades:
+                                    for trade in trades:
+                                        self.market_data[symbol].add_trade(trade)
+                                    total_processed += 1
+
+                                    if total_processed % 10 == 0:  # Log progress every 10 symbols
+                                        logger.info(
+                                            f"Processed {total_processed}/{len(symbols)} symbols"
+                                        )
+
+                            except Exception as e:
+                                logger.error(f"Error fetching trades for {symbol}: {e}")
+                                continue
+
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout processing batch starting at symbol {i}")
+                    continue
+
+                # Add small delay between batches to avoid rate limits
+                await asyncio.sleep(1)
+
+            logger.info(f"Completed initial data collection. Processing {total_processed} symbols")
+
+            # Calculate scores only for symbols with data
+            scores = []
+            scored_count = 0
+
+            for symbol, data in self.market_data.items():
+                try:
+                    metrics = data.calculate_metrics()
+                    if not metrics:
+                        continue
+
+                    # Only consider symbols with significant volume
+                    if metrics["total_volume"] < MIN_VOLUME_THRESHOLD:
+                        continue
+
+                    score = self._calculate_symbol_score(metrics)
+                    scores.append((symbol, score, metrics))
+                    scored_count += 1
+
+                    if scored_count % 10 == 0:
+                        logger.info(f"Calculated scores for {scored_count} symbols")
+
+                except Exception as e:
+                    logger.error(f"Error calculating metrics for {symbol}: {e}")
+                    continue
+
+            logger.info(f"Found {len(scores)} symbols with significant activity")
+
+            if not scores:
+                logger.warning("No symbols met the activity criteria")
+                return
+
+            # Sort and identify hot symbols
+            sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
+            new_hot_symbols = set(symbol for symbol, score, _ in sorted_scores[:TOP_SYMBOLS_COUNT])
+
+            if new_hot_symbols:
+                logger.info(f"Hot symbols identified: {', '.join(new_hot_symbols)}")
+                logger.info("Top 5 scores:")
+                for symbol, score, _ in sorted_scores[:5]:
+                    logger.info(f"{symbol}: {score:.2f}")
+
+            # Alert on newly hot symbols
+            for symbol in new_hot_symbols - self.hot_symbols:
+                metrics = next(m for s, _, m in sorted_scores if s == symbol)
+                await self.send_hot_symbol_alert(symbol, metrics)
+
+            self.hot_symbols = new_hot_symbols
+
         except Exception as e:
-            logger.error(f"Error in run loop: {e}")
+            logger.error(f"Error in market analysis: {e}", exc_info=True)
         finally:
-            # Properly close the exchange connection when the bot stops
-            if hasattr(self, "exchange") and self.exchange:
-                await self.exchange.close()
+            if exchange:
+                await exchange.close()
+
+    def _calculate_symbol_score(self, metrics: dict) -> float:
+        """Calculate a comprehensive score for symbol activity."""
+        if not metrics:
+            return 0.0
+
+        # Volume score
+        volume_score = metrics["total_volume"] / MIN_VOLUME_THRESHOLD
+
+        # Trend scores
+        volume_trend_score = max(0, metrics["volume_trend"]) * 2
+        price_trend_score = abs(metrics["price_trend"]) * 3
+
+        # Activity scores
+        trade_frequency = metrics["trade_count"] / (24 * 3600)  # trades per second
+        activity_score = min(1, trade_frequency * 10)
+
+        # Large trade impact
+        large_trade_score = len(metrics["large_trades"]) / max(1, metrics["trade_count"])
+
+        # Combine scores with weights
+        return (
+            volume_score * 0.3
+            + volume_trend_score * 0.2
+            + price_trend_score * 0.2
+            + activity_score * 0.15
+            + large_trade_score * 0.15
+        )
+
+    async def send_hot_symbol_alert(self, symbol: str, volume_data: dict):
+        """Sends enhanced alert for a hot symbol with detailed market metrics."""
+        try:
+            chart_file = await self.generate_volume_analysis_chart(
+                symbol, volume_data["large_trades"]
+            )
+
+            # Format detailed message with market insights
+            buy_sell_status = (
+                "🟢 Buying Pressure"
+                if volume_data["buy_sell_ratio"] > BUY_SELL_RATIO_THRESHOLD
+                else "🔴 Selling Pressure"
+                if volume_data["buy_sell_ratio"] < 1 / BUY_SELL_RATIO_THRESHOLD
+                else "⚪ Neutral"
+            )
+
+            message = (
+                f"🔥 **Market Activity Alert**: {symbol} 🔥\n\n"
+                f"**Price Action ({ANALYSIS_WINDOW_HOURS}h)**\n"
+                f"Current: ${format_number(volume_data['current_price'])}\n"
+                f"Change: {format_number(volume_data['price_change_pct'])}%\n"
+                f"Volatility: {format_number(volume_data['volatility'] * 100)}%\n\n"
+                f"**Volume Analysis**\n"
+                f"Total Volume: ${format_currency(volume_data['total_volume_usd'])}\n"
+                f"Market Status: {buy_sell_status}\n"
+                f"Buy/Sell Ratio: {format_number(volume_data['buy_sell_ratio'])}\n"
+                f"Buy Orders: {volume_data['buy_count']:,}\n"
+                f"Sell Orders: {volume_data['sell_count']:,}\n\n"
+                f"**Large Trade Analysis**\n"
+                f"Large Trades: {len(volume_data['large_trades'])}\n"
+                f"Market Impact: {format_number(volume_data['large_trade_impact'] * 100)}%\n"
+                f"Avg Trade Size: ${format_currency(volume_data['avg_trade_size'])}\n\n"
+                f"**Trading Activity**\n"
+                f"Total Trades: {volume_data['trade_count']:,}\n"
+                f"Avg Time Between Trades: {format_number(volume_data['avg_time_between_trades'])}s\n"
+            )
+
+            # Add market context or warnings
+            if volume_data["buy_sell_ratio"] > BUY_SELL_RATIO_THRESHOLD:
+                message += "\n⚠️ **Strong buying pressure detected**\n"
+            elif volume_data["buy_sell_ratio"] < 1 / BUY_SELL_RATIO_THRESHOLD:
+                message += "\n⚠️ **Heavy selling pressure detected**\n"
+
+            if volume_data["volatility"] > 0.05:  # 5% volatility
+                message += "⚠️ **High volatility alert**\n"
+
+            if volume_data["large_trade_impact"] > 0.3:  # 30% of volume from large trades
+                message += "⚠️ **Significant whale activity**\n"
+
+            # Send to Discord
+            channel = await self.get_alert_channel("HOT_MARKET")
+            if channel and chart_file:
+                with open(chart_file, "rb") as f:
+                    discord_file = disnake.File(f, filename="market_analysis.png")
+                    await channel.send(content=message, file=discord_file)
+
+                try:
+                    os.remove(chart_file)
+                except Exception as e:
+                    logger.warning(f"Failed to remove chart file: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to send hot symbol alert for {symbol}: {e}")
+
+    async def generate_volume_analysis_chart(
+        self,
+        symbol: str,
+        large_trades: list,
+    ) -> str | None:
+        """Generates a chart showing price action and large trades."""
+        try:
+            # Fetch OHLCV data
+            ohlcv = await PlotChart.get_ohlcv_data(symbol.split("/")[0], "15m")
+            if not ohlcv:
+                logger.error(f"Failed to fetch OHLCV data for {symbol}")
+                return None
+
+            # Create DataFrame
+            df = pd.DataFrame(ohlcv, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+            df["Date"] = pd.to_datetime(df["Date"], unit="ms")
+            df.set_index("Date", inplace=True)
+
+            # Create subplots for price and volume
+            fig = make_subplots(
+                rows=2,
+                cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.05,
+                subplot_titles=(f"{symbol} Price", "Volume"),
+                row_heights=[0.7, 0.3],
+            )
+
+            # Add candlestick chart
+            fig.add_trace(
+                go.Candlestick(
+                    x=df.index,
+                    open=df["Open"],
+                    high=df["High"],
+                    low=df["Low"],
+                    close=df["Close"],
+                    name="Price",
+                ),
+                row=1,
+                col=1,
+            )
+
+            # Add volume bars
+            fig.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume"), row=2, col=1)
+
+            # Add markers for large trades
+            for trade in large_trades:
+                trade_time = datetime.fromtimestamp(trade["timestamp"] / 1000)
+                marker_color = "green" if trade["side"] == "buy" else "red"
+
+                # Add marker on price chart
+                fig.add_trace(
+                    go.Scatter(
+                        x=[trade_time],
+                        y=[trade["price"]],
+                        mode="markers",
+                        marker=dict(
+                            symbol="triangle-up" if trade["side"] == "buy" else "triangle-down",
+                            size=12,
+                            color=marker_color,
+                            line=dict(width=1, color="white"),
+                        ),
+                        name=f"{trade['side'].title()} ${format_currency(trade['amount'] * trade['price'])}",
+                    ),
+                    row=1,
+                    col=1,
+                )
+
+            # Update layout
+            fig.update_layout(
+                title=f"{symbol} Volume Analysis",
+                xaxis_title="Time",
+                yaxis_title="Price (USDT)",
+                template="plotly_dark",
+                showlegend=True,
+                height=800,
+            )
+
+            # Save chart
+            if not os.path.exists("charts"):
+                os.makedirs("charts")
+
+            chart_file = f"charts/volume_analysis_{symbol.replace('/', '_')}.png"
+            fig.write_image(chart_file, scale=1.5, width=1000, height=800)
+            return chart_file
+
+        except Exception as e:
+            logger.error(f"Failed to generate volume analysis chart: {e}")
+            return None
+
+    async def run(self):
+        """Modified run method to include volume analysis"""
+        retry_count = 0
+        max_retries = 3
+
+        while retry_count < max_retries:
+            try:
+                logger.info("Starting market analysis system...")
+                await self.initialize_exchange()
+
+                while True:
+                    try:
+                        logger.info("Starting analysis cycle...")
+
+                        # Run volume analysis with timeout protection
+                        async with asyncio.timeout(300):  # 5 minute timeout
+                            await self.analyze_market_volume()
+
+                        # Process hot symbols in detail
+                        if self.hot_symbols:
+                            logger.info(f"Processing {len(self.hot_symbols)} hot symbols...")
+                            for symbol in self.hot_symbols:
+                                await self.process_symbol(symbol)
+
+                        logger.info(
+                            f"Completed analysis cycle. Hot symbols: {', '.join(self.hot_symbols)}"
+                        )
+
+                        next_update = datetime.now() + timedelta(seconds=VOLUME_UPDATE_INTERVAL)
+                        logger.info(f"Next update at {next_update.strftime('%H:%M:%S')}")
+
+                        await asyncio.sleep(VOLUME_UPDATE_INTERVAL)
+
+                    except asyncio.TimeoutError:
+                        logger.error("Analysis cycle timed out")
+                        await asyncio.sleep(60)
+                    except Exception as e:
+                        logger.error(f"Error in analysis cycle: {e}", exc_info=True)
+                        await asyncio.sleep(60)
+
+            except Exception as e:
+                retry_count += 1
+                logger.error(
+                    f"Fatal error in run loop (attempt {retry_count}/{max_retries}): {e}",
+                    exc_info=True,
+                )
+                if retry_count < max_retries:
+                    await asyncio.sleep(60)
+                else:
+                    logger.critical("Max retries reached, shutting down analysis system")
+                    break
+            finally:
+                if self.exchange:
+                    await self.exchange.close()
