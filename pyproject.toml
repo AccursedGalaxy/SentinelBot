@@ -21,6 +21,10 @@ black = "^24.10.0"
 ruff = "^0.8.4"
 mypy = "^1.14.0"
 pytest = "^8.3.4"
+plotly = "^6.0.0"
+colorlog = "^6.9.0"
+matplotlib = "^3.10.1"
+kaleido = "0.2.1"
 
 
 [build-system]
