@@ -19,16 +19,8 @@ Sentinel is a sophisticated Discord bot designed to provide cryptocurrency trade
 - SQLAlchemy for database management
 - Plotly and Matplotlib for chart generation
 
-## Setup
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Create a `.env` file with required environment variables
-4. Run the bot: `python main.py`
-
 ## Commands
 - `/help` - Display all available commands
-- `/price <ticker>` - Get current price for a cryptocurrency
-- `/coin <name>` - Get detailed coin information
 - `/trending` - View currently trending coins
 - `/gainers` - View top gaining cryptocurrencies
 - `/losers` - View top losing cryptocurrencies
@@ -41,13 +33,5 @@ This is a private project and contributions are not currently being accepted.
 [![License: CC BY-NC-ND 4.0](https://img.shields.io/badge/License-CC_BY--NC--ND_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 This project is licensed under Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International - see the [LICENSE](LICENSE) file for details.
-
-**Important Notice:**
-- ⛔ Commercial use is strictly prohibited
-- ⛔ Distribution of modified versions is not allowed
-- ⛔ Use in other projects is not permitted
-- ✅ Code viewing and learning is permitted
-- ✅ Contributions to this repository may be accepted
-- ✅ Attribution is required
 
 The full license terms are available in the [LICENSE](LICENSE) file and at [Creative Commons BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
