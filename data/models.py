@@ -1,16 +1,6 @@
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-)
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
 
 from logger_config import setup_logging
 
@@ -93,6 +83,12 @@ class Alert(Base):
     alert_type = Column(String, nullable=False)
     timestamp = Column(DateTime, nullable=False)
     last_alerted_at = Column(DateTime, nullable=False)
+    data = Column(JSON, nullable=True)  # Store all alert data as JSONN
+    llm_processed = Column(Boolean, default=False)  # Has the LLM processed this alert?
+    llm_sent = Column(Boolean, default=False)  # Did the LLM decide to send this alert?
+    llm_analysis = Column(Text, nullable=True)  # LLM's analysis of the alert
+    llm_reasoning = Column(Text, nullable=True)  # LLM's reasoning for sending/not sending
+    batch_id = Column(String, nullable=True)  # Group related alerts together
 
     def __repr__(self):
         return f"<Alert(id='{self.id}', symbol='{self.symbol}', alert_type='{self.alert_type}', timestamp='{self.timestamp}', last_alerted_at='{self.last_alerted_at}')>"

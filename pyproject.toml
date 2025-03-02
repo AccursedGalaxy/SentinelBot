@@ -25,6 +25,7 @@ plotly = "^6.0.0"
 colorlog = "^6.9.0"
 matplotlib = "^3.10.1"
 kaleido = "0.2.1"
+openai = "^1.65.2"
 
 
 [build-system]

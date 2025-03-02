@@ -4,18 +4,88 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from config.settings import SQL_DATABASE_URL
 from logger_config import setup_logging
 
-from .models import Base
-
 logger = setup_logging()
-
-engine = create_engine(SQL_DATABASE_URL)
-session_factory = sessionmaker(bind=engine)
-Session = scoped_session(session_factory)
 
 
 class Database:
+    """Database connection manager."""
+
+    _engine = None
+    _session_factory = None
+    _scoped_session = None
+    _initialized = False
+
     def __init__(self):
-        self.session = Session()
+        if not Database._initialized:
+            Database._initialize()
+
+    @classmethod
+    def _initialize(cls):
+        """Initialize the database engine and session factory."""
+        try:
+            if not SQL_DATABASE_URL:
+                logger.error("Database URL is not set in environment variables")
+                raise ValueError("Database URL is not set")
+
+            cls._engine = create_engine(
+                SQL_DATABASE_URL,
+                echo=False,
+                pool_pre_ping=True,  # Add connection testing
+                pool_recycle=3600,  # Recycle connections after an hour
+            )
+            cls._session_factory = sessionmaker(bind=cls._engine)
+            cls._scoped_session = scoped_session(cls._session_factory)
+            cls._initialized = True
+            logger.info("Database engine initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database engine: {e}")
+            raise
+
+    @property
+    def session(self):
+        """Get a database session."""
+        if not Database._initialized:
+            Database._initialize()
+        return Database._scoped_session()
+
+    @property
+    def engine(self):
+        """Get the database engine."""
+        if not Database._initialized:
+            Database._initialize()
+        return Database._engine
+
+    @classmethod
+    def create_tables(cls):
+        """Create all tables defined in the models."""
+        try:
+            if not cls._initialized:
+                cls._initialize()
+
+            if not cls._engine:
+                logger.error("Cannot create tables: Database engine is not initialized")
+                return
+
+            # Import Base here to avoid circular imports
+            from data.models import Base
+
+            Base.metadata.create_all(cls._engine)
+            logger.info("Tables created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create tables: {e}")
+
+    @classmethod
+    def get_session(cls):
+        """Get a session from the scoped session registry."""
+        if not cls._initialized:
+            cls._initialize()
+        return cls._scoped_session()
+
+    @classmethod
+    def close_session(cls):
+        """Close the current session."""
+        if cls._scoped_session:
+            cls._scoped_session.remove()
 
     def execute_query(self, query, params=None):
         result = self.session.execute(query, params or ())
@@ -65,14 +135,9 @@ class Database:
         self.session.delete(model)
         self.session.commit()
 
-    @staticmethod
-    def create_tables():
-        Base.metadata.create_all(engine)
-
-    @staticmethod
-    def get_session():
-        return Session()
-
-    @staticmethod
-    def close_session():
-        Session.remove()
+    def rollback(self):
+        """Rollback the current session."""
+        try:
+            self.session.rollback()
+        except Exception as e:
+            logger.error(f"Error during rollback: {e}")

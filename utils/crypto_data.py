@@ -5,10 +5,10 @@ import time
 
 import aiohttp
 import ccxt.async_support as ccxt
-import requests
 
-from config.settings import CG_API_KEY, CMC_API_KEY
+from config.settings import CG_API_KEY
 from logger_config import setup_logging
+from utils.exchange_manager import exchange_manager
 
 logger = setup_logging()
 request_semaphore = asyncio.Semaphore(5)
@@ -16,21 +16,8 @@ COIN_LIST_CACHE_FILE = "coin_list_cache.json"
 
 
 async def get_exchange(exchange_id):
-    """Get an exchange object."""
-    try:
-        if not isinstance(exchange_id, str):
-            raise ValueError("Exchange ID must be a string")
-
-        exchange_class = getattr(ccxt, exchange_id, None)
-        if not exchange_class:
-            raise ValueError(f"Exchange '{exchange_id}' not found in ccxt")
-
-        exchange = exchange_class()
-        await exchange.load_markets()
-        return exchange
-    except Exception as e:
-        logger.error(f"Error initializing exchange {exchange_id}: {e}")
-        return None
+    """Get an instance of the specified exchange with proper rate limiting."""
+    return await exchange_manager.get_exchange(exchange_id)
 
 
 async def get_markets(exchange):
@@ -182,24 +169,15 @@ async def fetch_price(symbol):
             await exchange.close()
 
 
-async def fetch_ohlcv(symbol, timeframe, since=None, limit=None):
-    """Fetch OHLCV data for a symbol using ccxt asyncio support."""
-    exchange = None
+async def fetch_ohlcv(symbol, timeframe="4h", limit=100):
+    """Fetch OHLCV data with proper rate limiting and error handling"""
     try:
-        # Initialize the exchange
-        exchange = await get_exchange("binance")
-        if not exchange:
-            raise Exception("Failed to initialize exchange")
-
-        # Fetch the OHLCV data
-        ohlcv = await exchange.fetch_ohlcv(symbol, timeframe, since, limit)
-        return ohlcv
+        return await exchange_manager.execute(
+            "binance", "fetch_ohlcv", symbol, timeframe, limit=limit
+        )
     except Exception as e:
         logger.error(f"Error fetching OHLCV for {symbol}: {e}")
-    finally:
-        # Close the exchange connection properly
-        if exchange:
-            await exchange.close()
+        return None
 
 
 async def fetch_top_gainers_losers(api_key, category="gainers", time_period="24h", top_coins=300):
@@ -395,3 +373,66 @@ async def fetch_category_info(api_key=CG_API_KEY):
                     f"Failed to fetch category info. Status: {response.status}. Response: {await response.text()}"
                 )
                 return None
+
+
+async def with_exchange(exchange_id, operation):
+    """
+    Helper function to ensure exchange connections are properly closed.
+
+    Args:
+        exchange_id: The exchange ID (e.g., 'binance')
+        operation: Async function that takes an exchange instance and performs operations
+
+    Returns:
+        The result of the operation or None if an error occurred
+    """
+    exchange = None
+    try:
+        exchange = getattr(ccxt, exchange_id)()
+        result = await operation(exchange)
+        return result
+    except Exception as e:
+        logger.error(f"Error in exchange operation ({exchange_id}): {e}")
+        return None
+    finally:
+        if exchange:
+            try:
+                await exchange.close()
+                logger.debug(f"Successfully closed {exchange_id} connection")
+            except Exception as e:
+                logger.error(f"Error closing {exchange_id} connection: {e}")
+
+
+class ExchangeContextManager:
+    def __init__(self, exchange_id):
+        self.exchange_id = exchange_id
+        self.exchange = None
+
+    async def __aenter__(self):
+        try:
+            self.exchange = getattr(ccxt, self.exchange_id)()
+            await self.exchange.load_markets()
+            return self.exchange
+        except Exception as e:
+            if self.exchange:
+                await self.exchange.close()
+            raise e
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.exchange:
+            try:
+                await self.exchange.close()
+            except Exception as e:
+                logger.error(f"Error closing exchange {self.exchange_id}: {e}")
+                # Don't suppress the original exception
+                return False
+        return False  # Don't suppress exceptions
+
+
+async def fetch_trades(symbol, limit=50):
+    """Fetch recent trades with proper rate limiting and error handling"""
+    try:
+        return await exchange_manager.execute("binance", "fetch_trades", symbol, limit=limit)
+    except Exception as e:
+        logger.error(f"Error fetching trades for {symbol}: {e}")
+        return []

@@ -2,6 +2,7 @@ import asyncio
 import os
 import signal
 import sys
+from datetime import datetime
 
 import disnake
 from disnake.ext import commands
@@ -24,12 +25,16 @@ logger = setup_logging("Sentinel", "green")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Add this right after your imports at the top of the file, before bot creation
+# This ensures the database is initialized once at the start
+Database._initialize()
+
 # Bot initialization
 intents = disnake.Intents.all()
 bot = commands.InteractionBot(test_guilds=TEST_GUILDS, intents=intents)
 MONEY_FLOW_CHANNEL = 1186336783261249638
 exchange = "binance"
-analysis_timeframe = "4h"
+analysis_timeframe = "1d"
 analysis_lookback = 31
 
 ping_main_alerts = "<@&1217104257216679987>"
@@ -45,13 +50,9 @@ vwap_alerts_channel = VWAP_ALERTS_CHANNEL
 large_order_alerts_channel = LARGE_ORDERS_ALERTS_CHANNEL
 
 alert_channels = {
-    # "RVOL_UP_EXTREME": rvol_alerts_channel,
-    "MACD_CROSSOVER_UP": macd_alerts_channel,
-    "MACD_CROSSOVER_DOWN": macd_alerts_channel,
-    "RVOL_MACD_CROSS_UP": main_alerts_channel,
-    "RVOL_MACD_CROSS_DOWN": main_alerts_channel,
-    # "VWAP_ALERT": vwap_alerts_channel,
     "LARGE_ORDER": large_order_alerts_channel,
+    # All other alerts go to main alerts channel
+    "DEFAULT": main_alerts_channel,
 }
 ping_roles = {
     "RVOL_UP_EXTREME": ping_rvol_alerts,
@@ -63,11 +64,16 @@ ping_roles = {
     "LARGE_ORDER": ping_large_order_alerts,
 }
 
+# Check channel IDs for your alerts
+print(f"Alert channels: {alert_channels}")
+
 
 # Bot events
 @bot.event
 async def on_ready():
-    session = Database.get_session()
+    # Create a db instance to ensure initialization
+    db = Database()
+    session = db.session
     try:
         # add guilds to the database
         for guild in bot.guilds:
@@ -76,7 +82,7 @@ async def on_ready():
                 new_guild = Guild(
                     guild_id=guild.id,
                     guild_name=guild.name,
-                    joined_at=disnake.utils.now(),
+                    joined_at=datetime.now(),
                 )
                 session.add(new_guild)
 
@@ -147,7 +153,7 @@ async def on_guild_join(guild):
             new_guild = Guild(
                 guild_id=guild.id,
                 guild_name=guild.name,
-                joined_at=disnake.utils.now(),
+                joined_at=datetime.now(),
             )
             session.add(new_guild)
             session.commit()
