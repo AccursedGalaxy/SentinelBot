@@ -1,8 +1,3 @@
-# TODO:
-# Create a new bot for the order alerts.
-# -> This will allow for better speed ana management of only orders in real time.
-# -> It will also help in reducing the load on the main bot.
-
 import asyncio
 import os
 import signal
