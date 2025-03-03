@@ -103,68 +103,111 @@ class LLMService:
         large_order_context: Dict[str, Any] = None,
     ) -> str:
         """Construct a prompt for the LLM to evaluate the alert."""
-        # Format current alert details
+        # Format the current alert details
+        symbol = current_alert.get("symbol", "Unknown")
+        alert_type = current_alert.get("alert_type", "Unknown")
+        price = current_alert.get("price", 0)
+        timestamp = current_alert.get("timestamp", "Unknown")
+
+        # Get indicator data
+        indicators = current_alert.get("indicators", {})
+
+        # Calculate price trend direction (last 3 days)
+        price_direction = "neutral"
+        recent_price_change = indicators.get("price_change_3d", 0)
+        if recent_price_change > 2:
+            price_direction = "strongly bullish"
+        elif recent_price_change > 0.5:
+            price_direction = "bullish"
+        elif recent_price_change < -2:
+            price_direction = "strongly bearish"
+        elif recent_price_change < -0.5:
+            price_direction = "bearish"
+
+        # Calculate if the asset is moving with or against the market
+        market_trend = market_context.get("market_direction", "neutral")
+        market_alignment = "aligned with market"
+        if ("bullish" in price_direction and "bearish" in market_trend) or (
+            "bearish" in price_direction and "bullish" in market_trend
+        ):
+            market_alignment = "moving against market trend"
+
+        # Create a concise alert details section with trend context
         alert_details = f"""
-        ## Current Alert
-        Symbol: {current_alert['symbol']}
-        Type: {current_alert['alert_type']}
-        Time: {current_alert['timestamp']}
-        Price: {current_alert.get('price', 'N/A')}
-        Volume: {current_alert.get('volume', 'N/A')}
+        ## Current Alert: {symbol}
+
+        - **Signal**: {alert_type} at ${price:.4f}
+        - **Time**: {timestamp}
+        - **Price Trend**: {price_direction} ({recent_price_change:.2f}% over 3 days)
+        - **Market Alignment**: {market_alignment}
         """
 
-        # Add triggered alerts if this is a grouped alert
-        if current_alert["alert_type"] == "GROUPED_ALERT" and "triggered_alerts" in current_alert:
-            alert_details += "\n### Triggered Alerts\n"
-            for idx, alert_type in enumerate(current_alert["triggered_alerts"]):
-                alert_details += f"{idx + 1}. {alert_type}\n"
+        # Add volume context for volume-based alerts
+        if "RVOL" in alert_type:
+            volume_ratio = indicators.get("volume_ratio", 0)
+            if "bearish" in price_direction and volume_ratio > 2:
+                alert_details += f"- **Volume Context**: {volume_ratio:.2f}x average volume on downtrend (likely distribution)\n"
+            elif "bullish" in price_direction and volume_ratio > 2:
+                alert_details += f"- **Volume Context**: {volume_ratio:.2f}x average volume on uptrend (likely accumulation)\n"
+            else:
+                alert_details += f"- **Volume Context**: {volume_ratio:.2f}x average volume\n"
 
-        # Add technical indicators if available
-        indicators = current_alert.get("indicators", {})
+        # Add relevant technical indicators
         if indicators:
-            alert_details += "\n### Technical Indicators\n"
-            for key, value in indicators.items():
-                alert_details += f"- {key}: {value}\n"
+            alert_details += f"""
+        - **Technical Data**:
+        """
+            if "volume_ratio" in indicators:
+                alert_details += (
+                    f"      - Volume: {indicators.get('volume_ratio', 0):.2f}x average\n"
+                )
+            if "rsi" in indicators:
+                alert_details += f"      - RSI: {indicators.get('rsi', 0):.2f}\n"
+            if "macd" in indicators and "signal" in indicators:
+                alert_details += f"      - MACD: {indicators.get('macd', 0):.4f}, Signal: {indicators.get('signal', 0):.4f}\n"
+            if "histogram" in indicators:
+                alert_details += f"      - Histogram: {indicators.get('histogram', 0):.4f}\n"
+            if "price_change_24h" in indicators:
+                alert_details += (
+                    f"      - 24h Change: {indicators.get('price_change_24h', 0):.2f}%\n"
+                )
 
         # Format historical alerts
-        history = "\n## Recent Alert History\n"
+        history = f"\n## Recent Alerts for {symbol}\n\n"
         if historical_alerts:
-            for idx, alert in enumerate(historical_alerts[:5]):  # Limit to 5 most recent
-                history += f"{idx + 1}. {alert['alert_type']} on {alert['timestamp']}: {alert.get('reasoning', 'No reasoning available')}\n"
+            for idx, alert in enumerate(historical_alerts[:3]):  # Limit to 3 most recent
+                history += f"- {alert.get('alert_type')}: ${alert.get('price', 0):.4f} ({alert.get('time_ago', 'unknown')} ago)\n"
         else:
             history += "No recent alerts for this symbol.\n"
 
         # Format market context
-        market_info = "\n## Market Context\n"
-        market_info += f"- BTC Dominance: {market_context.get('btc_dominance', 'N/A')}\n"
-        market_info += f"- Fear & Greed Index: {market_context.get('fear_greed_index', 'N/A')}\n"
-        market_info += (
-            f"- Market Direction (24h): {market_context.get('market_direction', 'N/A')}\n"
-        )
-        market_info += (
-            f"- Market Cap Change (24h): {market_context.get('market_cap_change', 'N/A')}%\n"
-        )
+        market_info = f"\n## Market Context\n\n"
+        btc_dominance = market_context.get("btc_dominance", "N/A")
+        market_direction = market_context.get("market_direction", "N/A")
+        market_cap_change = market_context.get("market_cap_change", "N/A")
 
-        # Format symbol-specific details
-        symbol_info = "\n## Symbol Details\n"
-        symbol_info += (
-            f"- Name: {symbol_details.get('name', current_alert['symbol'].split('/')[0])}\n"
-        )
-        if symbol_details.get("market_cap_rank", "N/A") != "N/A":
-            symbol_info += f"- Market Cap Rank: {symbol_details.get('market_cap_rank', 'N/A')}\n"
-        symbol_info += f"- Price Change (24h): {symbol_details.get('price_change_24h', 'N/A')}%\n"
-        symbol_info += f"- Price Change (7d): {symbol_details.get('price_change_7d', 'N/A')}%\n"
-        symbol_info += f"- Trading Volume (24h): {symbol_details.get('volume_24h', 'N/A')}\n"
+        market_info += f"- BTC Dominance: {btc_dominance}\n"
+        market_info += f"- Market Direction (24h): {market_direction}\n"
+        market_info += f"- Market Cap Change (24h): {market_cap_change}\n"
 
-        # Add large order context if available
-        large_order_info = ""
+        # Format symbol details
+        symbol_info = f"\n## {symbol} Details\n\n"
+        if symbol_details:
+            for key, value in symbol_details.items():
+                if key not in ["id", "image", "description"]:  # Skip verbose fields
+                    symbol_info += f"- {key.replace('_', ' ').capitalize()}: {value}\n"
+        else:
+            symbol_info += "No additional details available for this symbol.\n"
+
+        # Format large order information
+        large_order_info = "\n## Large Orders Context\n\n"
         if large_order_context and large_order_context.get("count", 0) > 0:
-            large_order_info = f"""
-            ## Recent Large Orders
-            - Total Large Orders: {large_order_context.get("count", 0)} in the last 4 hours
-            - Buy Orders: {large_order_context.get("buy_count", 0)}
-            - Sell Orders: {large_order_context.get("sell_count", 0)}
-            - Net Order Flow: {"BUY" if large_order_context.get("net_value_usd", 0) > 0 else "SELL"} (${abs(large_order_context.get("net_value_usd", 0)):,.2f})
+            large_order_info += f"""
+            - Total Large Orders: {large_order_context.get('count', 0)}
+            - Buy Orders: {large_order_context.get('buy_count', 0)}
+            - Sell Orders: {large_order_context.get('sell_count', 0)}
+            - Net Value: ${large_order_context.get('net_value_usd', 0):,.2f}
+            - Total Value: ${large_order_context.get('total_value_usd', 0):,.2f}
 
             ### Largest Orders:
             """
@@ -172,52 +215,57 @@ class LLMService:
             for idx, order in enumerate(large_order_context.get("largest_orders", [])[:3]):
                 order_time = datetime.fromtimestamp(order["timestamp"] / 1000).strftime("%H:%M:%S")
                 large_order_info += f"{idx + 1}. {order['side'].upper()} {order['amount']} at ${order['price']} (${order['value_usd']:,.2f}) at {order_time}\n"
-
-        # Update instructions for grouped alerts
-        if current_alert["alert_type"] == "GROUPED_ALERT":
-            instructions = """
-            ## Task
-            You're evaluating multiple technical signals that were triggered simultaneously for this asset.
-
-            Analyze the confluence of these signals and determine if together they represent a significant trading opportunity.
-
-            1. Consider how these signals interact and reinforce or contradict each other
-            2. Evaluate their combined significance in the current market context
-            3. Provide your evaluation in the following JSON format:
-               {
-                   "should_send": true/false,
-                   "title": "Concise title highlighting the most significant signal combination (max 60 chars)",
-                   "analysis": "Brief, comprehensive analysis of what these combined signals mean (3-4 sentences)",
-                   "market_context": "Only include if the broader market conditions significantly impact or explain this signal. Otherwise, omit this field completely.",
-                   "key_levels": "Support and resistance levels or other important price points to watch"
-               }
-
-            Be concise but comprehensive in your analysis, focusing on the interaction between the different signals.
-            """
         else:
-            # Original instructions for single alerts
-            instructions = """
-            ## Task
-            Evaluate this alert and determine if it represents a meaningful trading signal worth notifying traders about.
+            large_order_info = ""  # Skip large order section if no data
 
-            1. Analyze the technical indicators in the context of:
-               - The overall market conditions
-               - The token's recent performance
-               - Historical alert patterns for this token
-               - Volume and price action
+        # Instructions for the model with more permissive approval criteria
+        instructions = """
+        ## Your Task
 
-            2. Provide your evaluation in the following JSON format:
-               {
-                   "should_send": true/false,
-                   "title": "Concise, attention-grabbing title focusing on the key signal (max 60 chars)",
-                   "analysis": "Brief, technical analysis of what this alert means (2-3 sentences)",
-                   "market_context": "Only include if the broader market conditions significantly impact or explain this signal. Otherwise, omit this field completely.",
-                   "key_levels": "Support and resistance levels or other important price points to watch"
-               }
+        Evaluate this alert from a professional trader's perspective and determine if it represents a meaningful trading opportunity.
 
-            Only recommend sending alerts for genuine signals with high potential impact. Filter out noise and false signals.
-            Be concise and direct in your analysis - focus on facts and technical data, not opinions or predictions.
-            """
+        Consider:
+        1. Price direction and trend strength
+        2. Volume patterns and their interpretation (distribution vs. accumulation)
+        3. Whether the asset is moving with or against the broader market
+        4. Key support/resistance levels
+        5. Technical indicator confirmations or divergences
+
+        Trading Interpretation Guidelines:
+        - High volume on downtrends often indicates distribution (bearish)
+        - High volume on uptrends often indicates accumulation (bullish)
+        - Assets moving against market trend need stronger confirmation signals
+        - Understand the difference between breakout and breakdown signals
+        - Consider the asset's market cap and liquidity in your assessment
+
+        Alert Approval Guidelines:
+        - APPROVE ALL GROUPED_ALERT signals (these represent multiple technical signals)
+        - APPROVE ALL alerts for BTC and ETH (these are market-leading indicators)
+        - APPROVE ALL MACD crossovers for top 20 cryptocurrencies by market cap
+        - Be more permissive for top 100 market cap coins
+        - Even with bearish indicators, if volume is notable, the alert is worth sending
+        - When an asset is showing divergent behavior from the market, it's worth alerting
+        - If in doubt between sending or not, choose to send the alert
+
+        Formatting Guidelines:
+        - DO NOT mention technical alert types (e.g., "RVOL_UP_EXTREME") in your analysis
+        - Use professional trading terminology appropriate for experienced traders
+        - Be explicit about whether the signal is bullish, bearish, or needs more confirmation
+        - When volume is increasing during a price drop, make it clear this is likely distribution, not accumulation
+
+        Provide your evaluation in the following JSON format:
+        ```json
+        {
+            "should_send": true/false,
+            "title": "Brief, professionally-worded title (max 35 chars)",
+            "analysis": "1-2 concise sentences with professional market analysis and likely direction",
+            "market_context": "Only include if market conditions directly impact this asset",
+            "key_levels": "1-2 key support/resistance levels to watch"
+        }
+        ```
+
+        Your analysis should provide actionable and accurate information for professional traders.
+        """
 
         # Combine all parts of the prompt
         full_prompt = (

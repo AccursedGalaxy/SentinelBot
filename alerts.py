@@ -8,6 +8,7 @@ It includes tools for fetching candlestick data, calculating technical indicator
 import asyncio
 import os
 import statistics
+import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -132,6 +133,9 @@ class CryptoAnalyzer:
 
         # File path for the chart
         chart_file = f"charts/{symbol.replace('/', '_')}_analysis.png"
+
+        # Limit to more reasonable data range (increasing from 90 to 120 days)
+        candles = candles[-120:] if len(candles) > 120 else candles
 
         # Extract data from candles
         dates = np.array([datetime.utcfromtimestamp(candle[0] / 1000) for candle in candles])
@@ -383,17 +387,13 @@ class CryptoAnalyzer:
     async def fetch_candles(self, symbol):
         """Fetch candlestick data for a symbol."""
         try:
-            # Calculate the timestamp for lookback days ago
-            since = int((datetime.now() - timedelta(days=self.lookback_days)).timestamp() * 1000)
-
-            # Use the exchange manager to fetch OHLCV data
-            candles = await fetch_ohlcv(symbol, self.timeframe, limit=500)
+            # Use the exchange manager to fetch OHLCV data without the 'since' parameter
+            candles = await fetch_ohlcv(symbol, self.timeframe, limit=1000)
 
             if not candles or len(candles) < 2:
                 return None
 
             return candles
-
         except Exception as e:
             logger.error(f"Error fetching candles for {symbol}: {e}")
             return None
@@ -802,7 +802,7 @@ class CryptoAnalyzer:
                 if len(triggered_alerts) > 1 and await self.should_send_alert(
                     symbol, "GROUPED_ALERT"
                 ):
-                    await self.process_grouped_alerts(symbol, triggered_alerts, candles)
+                    await self.process_alerts(symbol, triggered_alerts)
                 # If we have just one alert, process it normally
                 elif len(triggered_alerts) == 1:
                     alert_info = triggered_alerts[0]
@@ -816,6 +816,98 @@ class CryptoAnalyzer:
         except Exception as e:
             logger.error(f"Unexpected error when processing {symbol}: {e!s}")
             self.db.session.rollback()
+
+    async def process_alerts(self, symbol, alerts_data):
+        """Process alerts for a symbol."""
+        try:
+            if not alerts_data:
+                return
+
+            # If we have multiple alerts for this symbol, group them
+            if len(alerts_data) > 1:
+                # Create a grouped alert
+                # Make sure price is available or provide a default
+                first_price = alerts_data[0].get("data", {}).get("price", 0)
+                if isinstance(alerts_data[0], dict) and "data" in alerts_data[0]:
+                    first_price = alerts_data[0]["data"].get("price", 0)
+                else:
+                    # Handle case where data structure is different
+                    logger.debug(f"Unexpected alert data structure: {alerts_data[0]}")
+                    first_price = 0
+
+                grouped_data = {
+                    "alerts": alerts_data,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "price": first_price,  # Ensure price exists
+                    "indicators": {},  # Will be populated from all alerts
+                }
+
+                # Combine indicators from all alerts
+                for alert in alerts_data:
+                    # Safely access indicators with fallbacks
+                    indicators = {}
+                    if isinstance(alert, dict):
+                        if "data" in alert and "indicators" in alert["data"]:
+                            indicators = alert["data"]["indicators"]
+                        elif "indicators" in alert:
+                            indicators = alert["indicators"]
+
+                    for indicator, value in indicators.items():
+                        grouped_data["indicators"][indicator] = value
+
+                # Log the grouped alert
+                logger.info(f"Processing {len(alerts_data)} grouped alerts for {symbol}")
+
+                # Get batch processor result
+                should_send = await self.process_alert_with_llm(
+                    symbol, "GROUPED_ALERT", grouped_data
+                )
+
+                # Don't process individual alerts if we've sent the grouped alert
+                if should_send:
+                    # We've already sent the grouped alert, so return early to avoid processing each alert
+                    return
+
+            # Process each alert individually if not grouped or if grouped alert wasn't sent
+            for alert_data in alerts_data:
+                # Make sure alert_data has the required structure
+                if not isinstance(alert_data, dict):
+                    logger.warning(f"Invalid alert data format for {symbol}: {alert_data}")
+                    continue
+
+                # Extract alert type with fallback
+                if "type" in alert_data:
+                    alert_type = alert_data["type"]
+                else:
+                    logger.warning(f"Missing alert type for {symbol}")
+                    continue
+
+                # Ensure data has a price
+                if "data" in alert_data and "price" not in alert_data["data"]:
+                    if "price" in alert_data:
+                        # Copy price to data if it exists at top level
+                        alert_data["data"]["price"] = alert_data["price"]
+                    else:
+                        # Fetch current price as fallback
+                        try:
+                            ticker = await self.exchange_manager.execute(
+                                "binance", "fetch_ticker", symbol
+                            )
+                            alert_data["data"]["price"] = ticker["last"]
+                        except Exception as e:
+                            logger.error(f"Error fetching price for {symbol}: {e}")
+                            alert_data["data"]["price"] = 0
+
+                # Skip alerts with too low volume
+                volume = alert_data.get("data", {}).get("volume", 0)
+                price = alert_data.get("data", {}).get("price", 0)
+                if volume * price < MIN_USD_VOLUME:
+                    continue
+
+                should_send = await self.process_alert_with_llm(symbol, alert_type, alert_data)
+
+        except Exception as e:
+            logger.error(f"Error processing alerts for {symbol}: {e}")
 
     async def process_large_orders_with_llm(self, symbol):
         """Process large orders with LLM analysis before alerting."""
@@ -1034,57 +1126,6 @@ class CryptoAnalyzer:
             "position_percent": position_percent,
         }
 
-    async def process_grouped_alerts(self, symbol, triggered_alerts, candles):
-        """Process multiple alerts for the same symbol as a group."""
-        try:
-            logger.info(f"Processing {len(triggered_alerts)} grouped alerts for {symbol}")
-
-            # Create a batch ID to associate these alerts
-            batch_id = f"{symbol}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-            # Collect alert types and data for a combined context
-            alert_types = [alert["type"] for alert in triggered_alerts]
-
-            # Use the data from the first alert as they all share the same indicators
-            combined_data = triggered_alerts[0]["data"].copy()
-            combined_data["triggered_alerts"] = alert_types
-
-            # Process through LLM with special handling for grouped alerts
-            alert, llm_result = await self.process_alert_with_llm(
-                symbol, "GROUPED_ALERT", combined_data, batch_id=batch_id
-            )
-
-            if alert is not None and llm_result.get("should_send", False):
-                # Generate a combined chart
-                image_bytes = await self.plot_ohlcv(symbol, candles, "GROUPED_ALERT")
-
-                # Send the combined alert
-                await self.send_enhanced_discord_alert(alert, llm_result, image_bytes)
-
-                # Mark all individual alerts as processed
-                self.db.session.rollback()  # Ensure clean state
-                try:
-                    for alert_info in triggered_alerts:
-                        individual_alert = Alert(
-                            symbol=symbol,
-                            alert_type=alert_info["type"],
-                            timestamp=datetime.now(),
-                            last_alerted_at=datetime.now(),
-                            data=alert_info["data"],
-                            llm_processed=True,
-                            llm_sent=False,  # Individual alerts aren't sent
-                            batch_id=batch_id,  # Link to the batch
-                        )
-                        self.db.session.add(individual_alert)
-                    self.db.session.commit()
-                except Exception as e:
-                    logger.error(f"Error saving individual alerts for batch {batch_id}: {e}")
-                    self.db.session.rollback()
-
-        except Exception as e:
-            logger.error(f"Error processing grouped alerts for {symbol}: {e}")
-            self.db.session.rollback()
-
     async def get_recent_large_orders(self, symbol, hours_lookback=4):
         """
         Fetch recent large orders for a symbol to provide context for alerts.
@@ -1161,41 +1202,54 @@ class CryptoAnalyzer:
             return {"count": 0, "orders": []}
 
     async def process_alert_with_llm(self, symbol, alert_type, alert_data, batch_id=None):
-        """Process an alert through the LLM to determine if it should be sent."""
-        alert = None
+        """Process an alert with LLM for better quality control."""
         try:
-            logger.info(f"Processing {alert_type} alert for {symbol} with LLM")
-
-            # Get alert context
-            context = await self.context_gatherer.get_alert_context(symbol, alert_type)
-
-            # Debug output for large orders
-            if alert_type == "LARGE_ORDER":
-                logger.debug(f"Large order data for {symbol}: {alert_data}")
-
-            # Ensure clean session state
-            self.db.session.rollback()
-
-            # Create a database record for the alert
+            # Create the alert in the database
             alert = Alert(
                 symbol=symbol,
                 alert_type=alert_type,
                 timestamp=datetime.now(),
                 last_alerted_at=datetime.now(),
                 data=alert_data,
-                batch_id=batch_id,
+                llm_processed=False,
+                llm_sent=False,
+                batch_id=batch_id or str(uuid.uuid4()),
             )
             self.db.session.add(alert)
             self.db.session.commit()
 
-            # Format alert for LLM
+            # Gather context for the alert
+            context = await self.context_gatherer.get_alert_context(symbol, alert_type)
+
+            # Calculate 3-day price change for trend context
+            candles = await self.fetch_candles(symbol)
+            if (
+                candles and len(candles) >= 4
+            ):  # Need at least 4 candles for 3-day comparison on daily timeframe
+                price_3d_ago = candles[-4][4]  # 4th last candle closing price
+                current_price = candles[-1][4]  # Latest candle closing price
+                price_change_3d = ((current_price - price_3d_ago) / price_3d_ago) * 100
+            else:
+                price_change_3d = 0
+
+            # Add price trend to alert data
+            if "indicators" not in alert_data:
+                alert_data["indicators"] = {}
+            alert_data["indicators"]["price_change_3d"] = price_change_3d
+
+            # Log the alert being processed
+            logger.info(f"Processing {alert_type} alert for {symbol} with LLM")
+
+            # Format the alert for LLM
             alert_for_llm = {
-                "symbol": symbol,
                 "alert_type": alert_type,
-                "timestamp": datetime.now().isoformat(),
+                "symbol": symbol,
                 "price": alert_data.get("price"),
+                "timestamp": alert_data.get(
+                    "timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
                 "volume": alert_data.get("volume"),
-                "indicators": alert_data,
+                "indicators": alert_data["indicators"],
                 "data": alert_data,  # Include all data
             }
 
@@ -1320,7 +1374,9 @@ class CryptoAnalyzer:
             if alert.data and "volume" in alert.data:
                 volume = alert.data["volume"]
                 if "price" in alert.data:
-                    formatted_volume = f"{format_number(volume)} (≈${format_currency(volume * alert.data['price'])})"
+                    # Just show the USD value, not the native token amount
+                    usd_volume = volume * alert.data["price"]
+                    formatted_volume = format_currency(usd_volume)
                 else:
                     formatted_volume = format_number(volume)
                 embed.add_field(name="Volume (24h)", value=formatted_volume, inline=True)
@@ -1360,3 +1416,104 @@ class CryptoAnalyzer:
         except Exception as e:
             logger.error(f"Error generating chart for {symbol}: {e}")
             return None
+
+    async def analyze_symbol(self, symbol):
+        """Analyze a symbol for potential trading signals."""
+        try:
+            logger.info(f"Processing symbol {symbol}")
+
+            # Get the current price
+            ticker = await self.exchange_manager.execute("binance", "fetch_ticker", symbol)
+            current_price = ticker["last"]
+
+            # Current volume in USD
+            volume_24h = ticker.get("quoteVolume", 0)
+
+            # Skip low volume symbols
+            if volume_24h < MIN_USD_VOLUME:
+                # logger.debug(f"Skipping {symbol} due to low volume (${volume_24h})")
+                return []
+
+            # Fetch candles
+            candles = await self.fetch_candles(symbol)
+            if not candles or len(candles) < 30:
+                return []
+
+            # Calculate all indicators using the same candle data
+            alerts = []
+
+            # MACD Calculation - ensure we use the same method as the chart display
+            closes = np.array([candle[4] for candle in candles])
+            closes_series = pd.Series(closes)
+
+            # Standard MACD parameters - match the chart display exactly
+            short_period = 12
+            long_period = 26
+            signal_period = 9
+
+            # Calculate EMAs
+            short_ema = closes_series.ewm(span=short_period, adjust=False).mean()
+            long_ema = closes_series.ewm(span=long_period, adjust=False).mean()
+
+            # Calculate MACD and Signal
+            macd = short_ema - long_ema
+            signal = macd.ewm(span=signal_period, adjust=False).mean()
+
+            # Last two values to check for crossover
+            if len(macd) >= 2 and len(signal) >= 2:
+                macd_current = macd.iloc[-1]
+                macd_previous = macd.iloc[-2]
+                signal_current = signal.iloc[-1]
+                signal_previous = signal.iloc[-2]
+
+                # Calculate histogram for visualization reference
+                histogram = macd - signal
+                histogram_current = histogram.iloc[-1]
+
+                # Check for MACD crossover UP (bullish)
+                if macd_previous < signal_previous and macd_current > signal_current:
+                    logger.info(f"MACD crossover UP detected for {symbol}")
+                    alerts.append(
+                        {
+                            "type": "MACD_CROSSOVER_UP",
+                            "data": {
+                                "price": current_price,
+                                "volume": volume_24h,
+                                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "indicators": {
+                                    "macd": float(macd_current),
+                                    "signal": float(signal_current),
+                                    "histogram": float(histogram_current),
+                                    "volume_24h": volume_24h,
+                                },
+                            },
+                        }
+                    )
+
+                # Check for MACD crossover DOWN (bearish)
+                elif macd_previous > signal_previous and macd_current < signal_current:
+                    logger.info(f"MACD crossover DOWN detected for {symbol}")
+                    alerts.append(
+                        {
+                            "type": "MACD_CROSSOVER_DOWN",
+                            "data": {
+                                "price": current_price,
+                                "volume": volume_24h,
+                                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "indicators": {
+                                    "macd": float(macd_current),
+                                    "signal": float(signal_current),
+                                    "histogram": float(histogram_current),
+                                    "volume_24h": volume_24h,
+                                },
+                            },
+                        }
+                    )
+
+            # Add other alert types here...
+
+            return alerts
+
+        except Exception as e:
+            logger.error(f"Error analyzing {symbol}: {e}")
+            return []

@@ -108,51 +108,99 @@ class ContextGatherer:
             self.db.session.rollback()
             return []
 
-    async def get_market_context(self) -> Dict[str, Any]:
-        """Get broader market context data."""
+    async def get_market_context(self):
+        """Get broader market context for better decision making."""
         try:
-            async with aiohttp.ClientSession() as session:
-                # Fetch Fear & Greed Index
-                async with session.get("https://api.alternative.me/fng/") as response:
-                    if response.status == 200:
-                        fear_greed_data = await response.json()
-                        fear_greed_value = fear_greed_data.get("data", [{}])[0].get("value", "N/A")
-                    else:
-                        fear_greed_value = "N/A"
+            # Fetch Bitcoin price change as a market indicator
+            btc_data = None
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://api.coingecko.com/api/v3/coins/bitcoin"
+                    ) as response:
+                        if response.status == 200:
+                            btc_data = await response.json()
+            except Exception as e:
+                logger.error(f"Error fetching BTC data: {e}")
 
-                # Get BTC dominance and market direction data
-                # For demo purposes using a placeholder endpoint
-                async with session.get("https://api.coingecko.com/api/v3/global") as response:
-                    if response.status == 200:
-                        global_data = await response.json()
-                        market_data = global_data.get("data", {})
-                        btc_dominance = market_data.get("bitcoin_dominance", "N/A")
-                        total_market_cap = market_data.get("total_market_cap", {}).get("usd", 0)
-                        market_cap_change = market_data.get(
-                            "market_cap_change_percentage_24h_usd", "N/A"
-                        )
-                        market_direction = (
-                            "UP" if market_cap_change and float(market_cap_change) > 0 else "DOWN"
-                        )
-                    else:
-                        btc_dominance = "N/A"
-                        market_direction = "N/A"
-                        market_cap_change = "N/A"
+            # Get overall market data
+            market_data = None
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("https://api.coingecko.com/api/v3/global") as response:
+                        if response.status == 200:
+                            market_data = await response.json()
+            except Exception as e:
+                logger.error(f"Error fetching market data: {e}")
+
+            # Extract BTC dominance
+            btc_dominance = "N/A"
+            market_cap_change = "N/A"
+            if market_data and "data" in market_data:
+                btc_dominance = f"{market_data['data']['market_cap_percentage']['btc']:.2f}%"
+                market_cap_change = (
+                    f"{market_data['data']['market_cap_change_percentage_24h_usd']:.2f}%"
+                )
+
+            # Determine overall market direction
+            market_direction = "N/A"
+            if btc_data and "market_data" in btc_data:
+                price_change = btc_data["market_data"]["price_change_percentage_24h"]
+                if price_change > 5:
+                    market_direction = f"strongly bullish ({price_change:.2f}%)"
+                elif price_change > 2:
+                    market_direction = f"bullish ({price_change:.2f}%)"
+                elif price_change > 0:
+                    market_direction = f"slightly bullish ({price_change:.2f}%)"
+                elif price_change > -2:
+                    market_direction = f"slightly bearish ({price_change:.2f}%)"
+                elif price_change > -5:
+                    market_direction = f"bearish ({price_change:.2f}%)"
+                else:
+                    market_direction = f"strongly bearish ({price_change:.2f}%)"
+
+            # Get top gainers/losers for additional context
+            top_movers = []
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&page=1&sparkline=false&price_change_percentage=24h"
+                    ) as response:
+                        if response.status == 200:
+                            coins = await response.json()
+                            # Extract top gainer and loser
+                            coins.sort(key=lambda x: x["price_change_percentage_24h"], reverse=True)
+                            if coins:
+                                top_gainer = coins[0]["symbol"].upper()
+                                top_gainer_change = coins[0]["price_change_percentage_24h"]
+                                top_movers.append(
+                                    f"Top gainer: {top_gainer} (+{top_gainer_change:.2f}%)"
+                                )
+
+                            coins.sort(key=lambda x: x["price_change_percentage_24h"])
+                            if coins:
+                                top_loser = coins[0]["symbol"].upper()
+                                top_loser_change = coins[0]["price_change_percentage_24h"]
+                                top_movers.append(
+                                    f"Top loser: {top_loser} ({top_loser_change:.2f}%)"
+                                )
+            except Exception as e:
+                logger.error(f"Error fetching top movers: {e}")
 
             return {
                 "btc_dominance": btc_dominance,
-                "fear_greed_index": fear_greed_value,
                 "market_direction": market_direction,
                 "market_cap_change": market_cap_change,
+                "top_movers": ", ".join(top_movers) if top_movers else "N/A",
             }
 
         except Exception as e:
             logger.error(f"Error fetching market context: {e}")
             return {
                 "btc_dominance": "N/A",
-                "fear_greed_index": "N/A",
                 "market_direction": "N/A",
                 "market_cap_change": "N/A",
+                "top_movers": "N/A",
             }
 
     async def get_symbol_details(self, symbol_base: str) -> Dict[str, Any]:
